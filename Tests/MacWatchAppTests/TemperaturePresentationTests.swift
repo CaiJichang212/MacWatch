@@ -3,16 +3,26 @@ import MacWatchCore
 @testable import MacWatchApp
 
 final class TemperaturePresentationTests: XCTestCase {
-    func testMenuBarTemperatureFormatterFormatsRoundedCelsius() {
-        XCTAssertEqual(MenuBarTemperatureFormatter.title(forCelsius: 72.4), "72°C")
-        XCTAssertEqual(MenuBarTemperatureFormatter.title(forCelsius: 72.6), "73°C")
+    func testTemperatureFormatterFormatsRoundedCelsiusAndFahrenheit() {
+        XCTAssertEqual(TemperatureFormatter.text(celsius: 72.4, unit: .celsius), "72°C")
+        XCTAssertEqual(TemperatureFormatter.text(celsius: 72.6, unit: .celsius), "73°C")
+        XCTAssertEqual(TemperatureFormatter.text(celsius: 72.4, unit: .fahrenheit), "162°F")
     }
 
-    func testMenuBarTemperatureFormatterUsesUnavailablePlaceholder() {
-        XCTAssertEqual(MenuBarTemperatureFormatter.title(forUnavailableMetric: .cpu), "--°C")
+    func testTemperatureMetricCatalogIncludesExpectedOverviewMetrics() {
+        XCTAssertEqual(
+            TemperatureMetricCatalog.overviewMetrics.map(\.domain),
+            [.cpu, .gpu, .memory, .ssd, .battery, .system]
+        )
+        XCTAssertEqual(
+            TemperatureMetricCatalog.compatibilityMetrics.map(\.domain),
+            [.cpu, .gpu, .memory, .ssd, .battery, .system]
+        )
+        XCTAssertEqual(TemperatureMetricCatalog.menuBarMetric(for: .hottest), nil)
+        XCTAssertEqual(TemperatureMetricCatalog.menuBarMetric(for: .cpu)?.metricName, TemperatureMetricName.cpuHottest)
     }
 
-    func testDashboardSnapshotShowsAllSupportedDomainsAndOnlyUsesValidHottest() throws {
+    func testOverviewSnapshotShowsAllSupportedDomainsAndOnlyUsesValidHottest() throws {
         let sessionID = UUID()
         let timestamp = Date(timeIntervalSince1970: 120)
         let state = LiveTemperatureState(
@@ -83,31 +93,17 @@ final class TemperaturePresentationTests: XCTestCase {
             )
         )
 
-        let snapshot = TemperatureDashboardSnapshot(liveState: state)
+        let snapshot = TemperatureOverviewSnapshot(liveState: state, settings: .default)
 
-        XCTAssertEqual(snapshot.hottestTitle, "68°C")
-        XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .memory, .ssd, .battery])
+        XCTAssertEqual(snapshot.hottestValueText, "68°C")
+        XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .memory, .ssd, .battery, .system])
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.statusText, "Read failed")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .memory })?.statusText, "Unsupported")
-        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .battery })?.statusText, "32°C")
+        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .battery })?.valueText, "32°C")
+        XCTAssertEqual(snapshot.availableMetricCount, 2)
     }
 
-    func testMenuBarTemperatureFormatterReturnsUnavailableForNonValidSamples() throws {
-        let invalid = try TemperatureSample.makeInvalid(
-            sessionID: UUID(),
-            timestamp: Date(timeIntervalSince1970: 1),
-            metricName: TemperatureMetricName.cpuHottest,
-            domain: .cpu,
-            deviceID: "cpu",
-            displayName: "CPU",
-            quality: .stale,
-            source: .hidSensors,
-            errorCode: "stale"
-        )
-        XCTAssertEqual(MenuBarTemperatureFormatter.title(for: invalid), "--°C")
-    }
-
-    func testDashboardSnapshotMarksStaleAndUnavailableStates() {
+    func testOverviewSnapshotMarksStaleAndUnavailableStates() {
         let sessionID = UUID()
         let timestamp = Date(timeIntervalSince1970: 200)
         let state = LiveTemperatureState(
@@ -133,77 +129,191 @@ final class TemperaturePresentationTests: XCTestCase {
             hottestValidSample: nil
         )
 
-        let snapshot = TemperatureDashboardSnapshot(liveState: state)
+        let snapshot = TemperatureOverviewSnapshot(liveState: state, settings: .default)
 
-        XCTAssertEqual(snapshot.hottestTitle, "--°C")
+        XCTAssertEqual(snapshot.hottestValueText, "--°C")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .cpu })?.statusText, "Stale")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .memory })?.statusText, "Unsupported")
+        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .cpu })?.isStale, true)
+    }
+
+    func testCompatibilitySnapshotIncludesUnavailableReasons() {
+        let sessionID = UUID()
+        let timestamp = Date(timeIntervalSince1970: 300)
+        let state = LiveTemperatureState(
+            sessionID: sessionID,
+            updatedAt: timestamp,
+            samplesByMetricName: [:],
+            capabilitiesByDomain: [
+                .gpu: capability(sessionID: sessionID, domain: .gpu, source: .smc, supported: false, readable: false, reasonCode: "unsupported", timestamp: timestamp),
+                .memory: capability(sessionID: sessionID, domain: .memory, source: .smc, supported: true, readable: false, reasonCode: "readFailed", timestamp: timestamp),
+            ],
+            hottestValidSample: nil
+        )
+
+        let snapshot = CompatibilitySnapshot(liveState: state)
+
+        XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .memory, .ssd, .battery, .system])
+        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.statusText, "Unsupported")
+        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.reasonText, "unsupported")
+        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .memory })?.statusText, "Read failed")
+    }
+
+    func testMenuBarTitleFormatterUsesConfiguredMetricAndKeepsTitleShort() throws {
+        let sessionID = UUID()
+        let timestamp = Date(timeIntervalSince1970: 400)
+        let cpu = try TemperatureSample.makeValid(
+            sessionID: sessionID,
+            timestamp: timestamp,
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            deviceID: "cpu",
+            displayName: "CPU",
+            valueCelsius: 72.4,
+            source: .hidSensors
+        )
+        let state = LiveTemperatureState(
+            sessionID: sessionID,
+            updatedAt: timestamp,
+            samplesByMetricName: [TemperatureMetricName.cpuHottest: cpu],
+            capabilitiesByDomain: [.cpu: capability(sessionID: sessionID, domain: .cpu, source: .hidSensors, supported: true, readable: true, reasonCode: "ok", timestamp: timestamp)],
+            hottestValidSample: cpu
+        )
+
+        let title = MenuBarTitleFormatter.title(
+            liveState: state,
+            settings: AppSettings.default
+        )
+
+        XCTAssertEqual(title.text, "72°C")
+        XCTAssertLessThanOrEqual(title.fullText.count, 30)
+    }
+
+    func testMenuBarTitleFormatterUsesLastHottestValueWhenAllMetricsAreStale() throws {
+        let sessionID = UUID()
+        let staleAt = Date(timeIntervalSince1970: 420)
+        let staleCPU = try TemperatureSample.makeInvalid(
+            sessionID: sessionID,
+            timestamp: staleAt,
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            deviceID: "cpu",
+            displayName: "CPU",
+            quality: .stale,
+            source: .hidSensors,
+            errorCode: "stale"
+        )
+        let staleGPU = try TemperatureSample.makeInvalid(
+            sessionID: sessionID,
+            timestamp: staleAt,
+            metricName: TemperatureMetricName.gpuHottest,
+            domain: .gpu,
+            deviceID: "gpu",
+            displayName: "GPU",
+            quality: .stale,
+            source: .smc,
+            errorCode: "stale"
+        )
+        let lastCPU = try TemperatureSample.makeValid(
+            sessionID: sessionID,
+            timestamp: staleAt.addingTimeInterval(-10),
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            deviceID: "cpu",
+            displayName: "CPU",
+            valueCelsius: 72,
+            source: .hidSensors
+        )
+        let lastGPU = try TemperatureSample.makeValid(
+            sessionID: sessionID,
+            timestamp: staleAt.addingTimeInterval(-12),
+            metricName: TemperatureMetricName.gpuHottest,
+            domain: .gpu,
+            deviceID: "gpu",
+            displayName: "GPU",
+            valueCelsius: 68,
+            source: .smc
+        )
+        let state = LiveTemperatureState(
+            sessionID: sessionID,
+            updatedAt: staleAt,
+            samplesByMetricName: [
+                TemperatureMetricName.cpuHottest: staleCPU,
+                TemperatureMetricName.gpuHottest: staleGPU,
+            ],
+            capabilitiesByDomain: [:],
+            hottestValidSample: nil,
+            lastValidSamplesByMetricName: [
+                TemperatureMetricName.cpuHottest: lastCPU,
+                TemperatureMetricName.gpuHottest: lastGPU,
+            ]
+        )
+
+        let title = MenuBarTitleFormatter.title(
+            liveState: state,
+            settings: .default
+        )
+
+        XCTAssertEqual(title.text, "72°C")
+        XCTAssertEqual(title.statusSuffix, "stale")
+        XCTAssertEqual(title.isStale, true)
     }
 
     func testDetailSnapshotFormatsStatisticsAndDoesNotFabricateZeroValues() throws {
         let sessionID = UUID()
         let base = Date(timeIntervalSince1970: 100)
+        let first = try TemperatureSample.makeValid(
+            sessionID: sessionID,
+            timestamp: base,
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            deviceID: "cpu",
+            displayName: "CPU",
+            valueCelsius: 60,
+            source: .hidSensors
+        )
+        let latest = try TemperatureSample.makeValid(
+            sessionID: sessionID,
+            timestamp: base.addingTimeInterval(5),
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            deviceID: "cpu",
+            displayName: "CPU",
+            valueCelsius: 72,
+            source: .hidSensors
+        )
         let series = TemperatureSeries(
             metricName: TemperatureMetricName.cpuHottest,
             domain: .cpu,
-            samples: [
-                try TemperatureSample.makeValid(
-                    sessionID: sessionID,
-                    timestamp: base,
-                    metricName: TemperatureMetricName.cpuHottest,
-                    domain: .cpu,
-                    deviceID: "cpu",
-                    displayName: "CPU",
-                    valueCelsius: 60,
-                    source: .hidSensors
-                ),
-                try TemperatureSample.makeValid(
-                    sessionID: sessionID,
-                    timestamp: base.addingTimeInterval(5),
-                    metricName: TemperatureMetricName.cpuHottest,
-                    domain: .cpu,
-                    deviceID: "cpu",
-                    displayName: "CPU",
-                    valueCelsius: 72,
-                    source: .hidSensors
-                ),
-            ],
+            samples: [first, latest],
             gaps: [],
-            statistics: TemperatureSeriesStatistics.compute(samples: [
-                try TemperatureSample.makeValid(
-                    sessionID: sessionID,
-                    timestamp: base,
-                    metricName: TemperatureMetricName.cpuHottest,
-                    domain: .cpu,
-                    deviceID: "cpu",
-                    displayName: "CPU",
-                    valueCelsius: 60,
-                    source: .hidSensors
-                ),
-                try TemperatureSample.makeValid(
-                    sessionID: sessionID,
-                    timestamp: base.addingTimeInterval(5),
-                    metricName: TemperatureMetricName.cpuHottest,
-                    domain: .cpu,
-                    deviceID: "cpu",
-                    displayName: "CPU",
-                    valueCelsius: 72,
-                    source: .hidSensors
-                ),
-            ])
+            statistics: TemperatureSeriesStatistics.compute(samples: [first, latest])
         )
 
         let snapshot = TemperatureDetailSnapshot(
-            domainTitle: "CPU",
+            descriptor: TemperatureMetricCatalog.requiredMetric(for: .cpu),
             series: series,
-            fallbackText: "Read failed"
+            currentSample: latest,
+            currentCapability: capability(
+                sessionID: sessionID,
+                domain: .cpu,
+                source: .hidSensors,
+                supported: true,
+                readable: true,
+                reasonCode: "ok",
+                timestamp: latest.timestamp
+            ),
+            lastValidSample: latest,
+            fallbackText: "Read failed",
+            settings: .default
         )
 
         XCTAssertEqual(snapshot.currentValueText, "72°C")
         XCTAssertEqual(snapshot.maximumText, "72°C")
         XCTAssertEqual(snapshot.minimumText, "60°C")
         XCTAssertEqual(snapshot.averageText, "66°C")
-        XCTAssertEqual(snapshot.statusText, "2 samples")
+        XCTAssertEqual(snapshot.statusText, "Valid")
+        XCTAssertEqual(snapshot.sampleSummaryText, "2 samples")
     }
 
     func testDetailSnapshotShowsFallbackWhenNoValidSamplesExist() throws {
@@ -229,15 +339,114 @@ final class TemperaturePresentationTests: XCTestCase {
         )
 
         let snapshot = TemperatureDetailSnapshot(
-            domainTitle: "CPU",
+            descriptor: TemperatureMetricCatalog.requiredMetric(for: .cpu),
             series: series,
-            fallbackText: "Read failed"
+            currentSample: nil,
+            currentCapability: nil,
+            lastValidSample: nil,
+            fallbackText: "Read failed",
+            settings: .default
         )
 
         XCTAssertEqual(snapshot.currentValueText, "--°C")
         XCTAssertEqual(snapshot.statusText, "Read failed")
         XCTAssertEqual(snapshot.maximumText, "--")
         XCTAssertEqual(snapshot.averageText, "--")
+    }
+
+    func testDetailSnapshotUsesCurrentLiveStateForStatusAndSource() throws {
+        let sessionID = UUID()
+        let base = Date(timeIntervalSince1970: 800)
+        let lastValid = try TemperatureSample.makeValid(
+            sessionID: sessionID,
+            timestamp: base,
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            deviceID: "cpu",
+            displayName: "CPU",
+            valueCelsius: 74,
+            source: .hidSensors
+        )
+        let stale = try TemperatureSample.makeInvalid(
+            sessionID: sessionID,
+            timestamp: base.addingTimeInterval(30),
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            deviceID: "cpu",
+            displayName: "CPU",
+            quality: .stale,
+            source: .hidSensors,
+            errorCode: "stale"
+        )
+        let series = TemperatureSeries(
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            samples: [lastValid],
+            gaps: [],
+            statistics: TemperatureSeriesStatistics.compute(samples: [lastValid])
+        )
+
+        let snapshot = TemperatureDetailSnapshot(
+            descriptor: TemperatureMetricCatalog.requiredMetric(for: .cpu),
+            series: series,
+            currentSample: stale,
+            currentCapability: capability(
+                sessionID: sessionID,
+                domain: .cpu,
+                source: .hidSensors,
+                supported: true,
+                readable: true,
+                reasonCode: "ok",
+                timestamp: stale.timestamp
+            ),
+            lastValidSample: lastValid,
+            fallbackText: "Waiting",
+            settings: .default
+        )
+
+        XCTAssertEqual(snapshot.currentValueText, "74°C")
+        XCTAssertEqual(snapshot.statusText, "Stale")
+        XCTAssertEqual(snapshot.sourceText, "HID Sensors")
+        XCTAssertEqual(snapshot.sampleSummaryText, "1 sample")
+    }
+
+    func testPopupRowModelIncludesUpdatedAtText() throws {
+        let sessionID = UUID()
+        let timestamp = Date(timeIntervalSince1970: 900)
+        let state = LiveTemperatureState(
+            sessionID: sessionID,
+            updatedAt: timestamp,
+            samplesByMetricName: [
+                TemperatureMetricName.cpuHottest: try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: timestamp,
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 67,
+                    source: .hidSensors
+                ),
+            ],
+            capabilitiesByDomain: [:],
+            hottestValidSample: try TemperatureSample.makeValid(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                metricName: TemperatureMetricName.cpuHottest,
+                domain: .cpu,
+                deviceID: "cpu",
+                displayName: "CPU",
+                valueCelsius: 67,
+                source: .hidSensors
+            )
+        )
+
+        let snapshot = TemperatureOverviewSnapshot(liveState: state, settings: .default)
+        let row = try XCTUnwrap(snapshot.rows.first(where: { $0.domain == .cpu }))
+        let model = MenuBarPopupRowModel(row: row)
+
+        XCTAssertEqual(model.updatedAtText, "Updated: \(row.updatedAtText)")
+        XCTAssertNotEqual(model.updatedAtText, "Updated: --")
     }
 
     func testTrendSegmentsBreakAtGapBoundaries() throws {

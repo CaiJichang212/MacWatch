@@ -54,4 +54,16 @@ final class WindowCommandCenterTests: XCTestCase {
 
         XCTAssertEqual(openCalls, 1)
     }
+
+    func testOpenMainWindowDeliversRequestedRoute() {
+        let commandCenter = WindowCommandCenter()
+        var receivedRoute: MainWindowRoute?
+        commandCenter.registerNavigationAction { route in
+            receivedRoute = route
+        }
+
+        commandCenter.openMainWindow(route: .compatibility)
+
+        XCTAssertEqual(receivedRoute, .compatibility)
+    }
 }
