@@ -11,4 +11,19 @@ final class AppLifecycleCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(coordinator.events, [.launched, .willSleep, .didWake])
     }
+
+    func testForwardsLifecycleEventsToInjectedHandler() {
+        var forwarded: [AppLifecycleEvent] = []
+        let coordinator = AppLifecycleCoordinator { event in
+            forwarded.append(event)
+        }
+
+        coordinator.record(.launched)
+        coordinator.record(.willSleep)
+        coordinator.record(.didWake)
+        coordinator.record(.willTerminate)
+
+        XCTAssertEqual(coordinator.events, [.launched, .willSleep, .didWake, .willTerminate])
+        XCTAssertEqual(forwarded, [.launched, .willSleep, .didWake, .willTerminate])
+    }
 }
