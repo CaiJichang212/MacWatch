@@ -2,6 +2,7 @@ import Foundation
 import MacWatchCore
 
 public struct SSDTemperatureProbe: TemperatureProbe {
+    public let id: String = "ssd.internal.primary"
     public let domain: TemperatureDomain = .ssd
     public let source: TemperatureSource = .nvmeSMART
     public let defaultMetricName: String = TemperatureMetricName.ssdInternal

@@ -41,6 +41,7 @@ public final class AppleSiliconHIDTemperatureReader: AppleSiliconTemperatureRead
 }
 
 public struct CPUTemperatureProbe: TemperatureProbe {
+    public let id: String = "cpu.hid-sensors.primary"
     public let domain: TemperatureDomain = .cpu
     public let source: TemperatureSource = .hidSensors
     public let defaultMetricName: String = TemperatureMetricName.cpuHottest

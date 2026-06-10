@@ -2,6 +2,7 @@ import Foundation
 import MacWatchCore
 
 public struct MemoryTemperatureProbe: TemperatureProbe {
+    public let id: String = "memory.proximity.primary"
     public let domain: TemperatureDomain = .memory
     public let source: TemperatureSource = .smc
     public let defaultMetricName: String = TemperatureMetricName.memoryProximity

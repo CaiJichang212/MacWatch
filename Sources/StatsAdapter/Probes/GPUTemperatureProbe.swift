@@ -2,6 +2,7 @@ import Foundation
 import MacWatchCore
 
 public struct GPUTemperatureProbe: TemperatureProbe {
+    public let id: String = "gpu.primary"
     public let domain: TemperatureDomain = .gpu
     public let source: TemperatureSource = .hidSensors
     public let defaultMetricName: String = TemperatureMetricName.gpuHottest

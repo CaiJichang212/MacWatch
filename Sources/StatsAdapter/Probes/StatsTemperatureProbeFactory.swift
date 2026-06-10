@@ -22,7 +22,15 @@ public struct StatsTemperatureProbeFactory {
         ]
     }
 
+    public func makeSystemProbes() -> [any TemperatureProbe] {
+        []
+    }
+
+    public func makeSensorProbes() -> [any TemperatureProbe] {
+        []
+    }
+
     public func makeDefaultProbes() -> [any TemperatureProbe] {
-        makeFastProbes() + makeSlowProbes()
+        makeFastProbes() + makeSlowProbes() + makeSystemProbes() + makeSensorProbes()
     }
 }

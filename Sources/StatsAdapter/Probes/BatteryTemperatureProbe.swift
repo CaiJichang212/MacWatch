@@ -2,6 +2,7 @@ import Foundation
 import MacWatchCore
 
 public struct BatteryTemperatureProbe: TemperatureProbe {
+    public let id: String = "battery.primary"
     public let domain: TemperatureDomain = .battery
     public let source: TemperatureSource = .batteryIORegistry
     public let defaultMetricName: String = TemperatureMetricName.battery
