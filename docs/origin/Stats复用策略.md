@@ -1,5 +1,15 @@
 Stats复用策略
 
+## 索引目录（大模型检索用）
+
+> 使用方式：先按本索引定位需要章节，再只读取对应片段，避免把整篇文档塞入上下文。
+
+- 推荐策略：确认采用“MacWatch 独立仓库 + Stats 只读 Git submodule + 自写 Adapter 层”的总体取舍。
+- 当前仓库结构：查看 `Sources/MacWatchApp`、`Sources/MacWatchCore`、`Sources/StatsAdapter`、`Vendor/Stats`、`patches/stats` 的职责。
+- 开发规则：确认 `Vendor/Stats` 只读、只通过 `StatsAdapter` 包装、禁止依赖 Stats UI/Remote/LevelDB、固定 tag/commit 和升级流程。
+- 不建议的方案：判断为什么不 fork Stats、不复制 Stats 源码、不提前改 Stats。
+- 例外处理：查找必须微调 Stats 文件时优先使用 Adapter、target 配置、patch 或 fork 的顺序。
+
 建议用这个策略：**MacWatch 独立仓库 + Stats 作为只读 Git submodule + 自己写 Adapter 层**。
 
 原因很直接：Stats 是完整 macOS App，不是稳定的 Swift Package “第三方库”。它有 App、Modules、Kit、SMC、Widgets 等完整工程结构；直接当 SPM 依赖调用大概率不现实。把它作为**源码级上游依赖**固定到某个 release/tag，然后在 MacWatch 里只引用需要的采集代码或参考实现。

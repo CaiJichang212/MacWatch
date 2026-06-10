@@ -1,5 +1,33 @@
 # Stats 功能梳理（事实版）
 
+## 索引目录（大模型检索用）
+
+> 使用方式：先按本索引定位需要章节，再只读取对应标题下的片段，避免把整篇文档塞入上下文。
+
+- [文档元信息](#stats-功能梳理事实版)：查看分析对象、修订日期、核验基础和事实限定说明。
+- [1. 项目概述](#1-项目概述)：快速理解 Stats 的整体能力范围、模块化方式和 LevelDB 历史机制。
+- [2. 源码结构概览](#2-源码结构概览)：定位 Stats 源码目录和文件职责时读取。
+- [3. 全局架构](#3-全局架构)：理解 Stats 的 AppDelegate、Module、Reader、Widget、Store、DB、SystemKit、SMC helper 链路时读取。
+  - [3.1 AppDelegate](#31-appdelegate)：查看 Stats 启动和模块挂载事实。
+  - [3.2 Module 基类](#32-module-基类)：理解模块如何组合 Reader、Widget、Popup、设置和通知。
+  - [3.3 Reader 基类](#33-reader-基类)：理解采集器抽象、更新节奏和历史写入条件。
+  - [3.4 Widget 框架](#34-widget-框架)：确认菜单栏 Widget 结构和 UI 责任。
+  - [3.5 Store 与 DB](#35-store-与-db)：确认 Stats 内部状态存储和 LevelDB 历史机制。
+  - [3.6 SystemKit](#36-systemkit)：查找设备识别、系统信息和 Apple Silicon 判断事实。
+  - [3.7 SMC 与 Helper](#37-smc-与-helper)：确认 SMC、helper、风扇控制和权限相关事实。
+- [4. 模块功能梳理](#4-模块功能梳理)：按模块查找 Stats 可参考能力和不应复用的能力。
+  - [4.1 CPU 模块](#41-cpu-模块)：查找 CPU 采集、温度或负载相关实现线索。
+  - [4.2 RAM 模块](#42-ram-模块)：查找内存监控、压力和 swap 相关实现线索。
+  - [4.3 Disk 模块](#43-disk-模块)：查找磁盘、SMART、空间和 I/O 相关实现线索。
+  - [4.4 Network 模块](#44-network-模块)：确认网络监控、外部 IP 和联网能力事实。
+  - [4.5 Battery 模块](#45-battery-模块)：查找电池温度、IORegistry 和电池状态实现线索。
+  - [4.6 Sensors 模块](#46-sensors-模块)：查找 HID Sensors、SMC 传感器和温度读取实现线索。
+  - [4.7 GPU 模块](#47-gpu-模块)：查找 GPU 指标和 IOReport 相关实现线索。
+  - [4.8 Bluetooth 模块](#48-bluetooth-模块)：确认蓝牙设备监控能力事实。
+  - [4.9 Clock 模块](#49-clock-模块)：确认时钟模块能力事实。
+  - [4.10 Remote 模块与 SystemStats](#410-remote-模块与-systemstats)：确认远程监控、外部服务和系统状态上报事实。
+- [5. 设置、Popup、通知与组合菜单](#5-设置popup通知与组合菜单)：查找 Stats UI 组合、设置、通知和菜单行为事实。
+
 文档版本：v1.0  
 分析对象：`/Users/lzc/TNTprojectZ/AprojectZ/MacWatch/Vendor/Stats` 源码  
 修订日期：2026-06-09  
