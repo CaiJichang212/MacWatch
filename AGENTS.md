@@ -19,6 +19,8 @@
 
 不要在 `AGENTS.md` 中重复维护完整产品规格；如发现细节冲突，以用户最新明确指令和 `docs/origin` 文档为准，并说明取舍。
 
+忽略目录： `docs/.del_tmp`，不要参考其内容。
+
 ## 项目边界
 
 MacWatch MVP 是本机温度监控工具，核心是 Apple Silicon MacBook Air 上的温度采集、能力检测、状态展示、会话历史和趋势查看。
