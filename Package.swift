@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "MacWatch",
     platforms: [
-        .macOS(.v12),
+        .macOS(.v13),
     ],
     products: [
         .executable(name: "MacWatchApp", targets: ["MacWatchApp"]),
@@ -38,6 +38,12 @@ let package = Package(
             name: "StatsAdapterTests",
             dependencies: [
                 "StatsAdapter",
+            ]
+        ),
+        .testTarget(
+            name: "MacWatchAppTests",
+            dependencies: [
+                "MacWatchApp",
             ]
         ),
     ]
