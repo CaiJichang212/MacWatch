@@ -1,6 +1,7 @@
 import Foundation
 
 public protocol TemperatureProbe: Sendable {
+    var id: String { get }
     var domain: TemperatureDomain { get }
     var source: TemperatureSource { get }
     var defaultMetricName: String { get }

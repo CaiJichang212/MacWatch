@@ -47,8 +47,9 @@ public final class TemperatureMonitorService {
             let resolvedSamples = samples.isEmpty
                 ? [makeReadFailedSample(for: probe, sessionID: sessionID, timestamp: timestamp)]
                 : samples
+            let validatedSamples = resolvedSamples.map { validatedSample($0) }
 
-            for sample in resolvedSamples {
+            for sample in validatedSamples {
                 collectedSamples.append(sample)
                 do {
                     try repository.insertSample(sample)
@@ -154,6 +155,37 @@ public final class TemperatureMonitorService {
             attributes: [
                 "attemptedMetricName": probe.defaultMetricName,
                 "sourcePriority": probe.source.rawValue,
+            ]
+        )
+    }
+
+    private func validatedSample(_ sample: TemperatureSample) -> TemperatureSample {
+        guard sample.quality == .valid else {
+            return sample
+        }
+        guard let valueCelsius = sample.valueCelsius,
+              TemperatureReadingValidator.isValidCelsius(valueCelsius) else {
+            return invalidSample(from: sample)
+        }
+
+        return sample
+    }
+
+    private func invalidSample(from sample: TemperatureSample) -> TemperatureSample {
+        return try! TemperatureSample.makeInvalid(
+            id: UUID(),
+            sessionID: sample.sessionID,
+            timestamp: sample.timestamp,
+            metricName: sample.metricName,
+            domain: sample.domain,
+            deviceID: sample.deviceID,
+            displayName: sample.displayName,
+            quality: .readFailed,
+            source: sample.source,
+            errorCode: "invalidTemperature",
+            attributes: [
+                "reason": "invalidTemperature",
+                "source": sample.source.rawValue,
             ]
         )
     }
