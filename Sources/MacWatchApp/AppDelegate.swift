@@ -15,6 +15,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.handleLifecycleEvent(event)
     }
 
+    override init() {
+        self.sessionLifecycleService = SessionLifecycleService(
+            repository: MacWatchSharedDependencies.sessionHistoryRepository
+        )
+        self.shouldSetupMenuBarOnLaunch = true
+        self.shouldRegisterObserversOnLaunch = true
+        self.shouldStartRuntimeOnLaunch = true
+        self.windowCommandCenter = .shared
+        self.runtime = MacWatchRuntime(
+            sessionHistoryRepository: MacWatchSharedDependencies.sessionHistoryRepository,
+            settingsStore: MacWatchSharedDependencies.settingsStore
+        )
+        super.init()
+    }
+
     init(
         sessionHistoryRepository: SessionHistoryRepository = MacWatchSharedDependencies.sessionHistoryRepository,
         shouldSetupMenuBarOnLaunch: Bool = true,
@@ -35,13 +50,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lifecycleCoordinator.record(.launched)
         if shouldSetupMenuBarOnLaunch {
             menuBarController = MenuBarController(
-                openMainWindow: { [weak self] in self?.openMainWindow() },
+                runtime: runtime,
+                openDashboard: { [weak self] in self?.openDashboard() },
+                openCompatibility: { [weak self] in self?.openCompatibility() },
                 openSettings: { [weak self] in self?.openSettings() },
                 quitApplication: { [weak self] in self?.quitApplication() }
             )
             runtime.stateDidChange = { [weak self] state in
-                self?.menuBarController?.update(liveState: state)
+                guard let self else {
+                    return
+                }
+                self.menuBarController?.update(liveState: state, settings: self.runtime.settings)
             }
+            runtime.settingsDidChange = { [weak self] settings in
+                guard let self else {
+                    return
+                }
+                self.menuBarController?.update(liveState: self.runtime.liveState, settings: settings)
+            }
+            menuBarController?.update(liveState: runtime.liveState, settings: runtime.settings)
         }
         if shouldRegisterObserversOnLaunch {
             registerObservers()
@@ -102,9 +129,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runtime.handleLifecycleEvent(event)
     }
 
-    private func openMainWindow() {
+    private func openDashboard() {
         NSApp.activate(ignoringOtherApps: true)
-        windowCommandCenter.openMainWindow()
+        windowCommandCenter.openMainWindow(route: .dashboard)
+    }
+
+    private func openCompatibility() {
+        NSApp.activate(ignoringOtherApps: true)
+        windowCommandCenter.openMainWindow(route: .compatibility)
     }
 
     private func openSettings() {
