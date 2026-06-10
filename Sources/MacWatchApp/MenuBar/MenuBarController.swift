@@ -2,9 +2,7 @@ import AppKit
 
 final class MenuBarController: NSObject {
     private let statusItem: NSStatusItem
-    private let openMainWindowHandler: () -> Void
-    private let openSettingsHandler: () -> Void
-    private let quitApplicationHandler: () -> Void
+    private let commandHandler: MenuBarCommandHandler
 
     init(
         openMainWindow: @escaping () -> Void,
@@ -12,9 +10,11 @@ final class MenuBarController: NSObject {
         quitApplication: @escaping () -> Void
     ) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        openMainWindowHandler = openMainWindow
-        openSettingsHandler = openSettings
-        quitApplicationHandler = quitApplication
+        commandHandler = MenuBarCommandHandler(
+            openMainWindow: openMainWindow,
+            openSettings: openSettings,
+            quitApplication: quitApplication
+        )
         super.init()
         configureStatusItem()
     }
@@ -26,30 +26,15 @@ final class MenuBarController: NSObject {
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Open MacWatch", action: #selector(openMainWindow), keyEquivalent: "o"))
-        menu.addItem(NSMenuItem(title: "Settings", action: #selector(openSettings), keyEquivalent: ","))
+        menu.addItem(NSMenuItem(title: "Open MacWatch", action: #selector(MenuBarCommandHandler.openMainWindow), keyEquivalent: "o"))
+        menu.addItem(NSMenuItem(title: "Settings", action: #selector(MenuBarCommandHandler.openSettings), keyEquivalent: ","))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit MacWatch", action: #selector(quitApplication), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit MacWatch", action: #selector(MenuBarCommandHandler.quitApplication), keyEquivalent: "q"))
 
         for item in menu.items {
-            item.target = self
+            item.target = commandHandler
         }
 
         return menu
-    }
-
-    @objc
-    private func openMainWindow() {
-        openMainWindowHandler()
-    }
-
-    @objc
-    private func openSettings() {
-        openSettingsHandler()
-    }
-
-    @objc
-    private func quitApplication() {
-        quitApplicationHandler()
     }
 }
