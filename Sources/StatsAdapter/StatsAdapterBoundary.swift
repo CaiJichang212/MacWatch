@@ -23,6 +23,7 @@ public extension StatsAdapterBoundary {
             "MQTT",
             "OAuth",
             "Updater",
+            "Widget",
             "Notifications",
             "LaunchAtLogin helper",
             "SMC privileged helper",
