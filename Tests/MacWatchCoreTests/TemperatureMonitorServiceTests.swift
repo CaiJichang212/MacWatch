@@ -246,6 +246,7 @@ final class TemperatureMonitorServiceTests: XCTestCase {
 }
 
 private struct FakeTemperatureProbe: TemperatureProbe {
+    let id: String = UUID().uuidString
     let domain: TemperatureDomain
     let source: TemperatureSource
     let defaultMetricName: String

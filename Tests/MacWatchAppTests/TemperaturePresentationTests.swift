@@ -91,6 +91,54 @@ final class TemperaturePresentationTests: XCTestCase {
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .memory })?.statusText, "Unsupported")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .battery })?.statusText, "32°C")
     }
+
+    func testMenuBarTemperatureFormatterReturnsUnavailableForNonValidSamples() throws {
+        let invalid = try TemperatureSample.makeInvalid(
+            sessionID: UUID(),
+            timestamp: Date(timeIntervalSince1970: 1),
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            deviceID: "cpu",
+            displayName: "CPU",
+            quality: .stale,
+            source: .hidSensors,
+            errorCode: "stale"
+        )
+        XCTAssertEqual(MenuBarTemperatureFormatter.title(for: invalid), "--°C")
+    }
+
+    func testDashboardSnapshotMarksStaleAndUnavailableStates() {
+        let sessionID = UUID()
+        let timestamp = Date(timeIntervalSince1970: 200)
+        let state = LiveTemperatureState(
+            sessionID: sessionID,
+            updatedAt: timestamp,
+            samplesByMetricName: [
+                TemperatureMetricName.cpuHottest: staleSample(
+                    sessionID: sessionID,
+                    timestamp: timestamp,
+                    metricName: TemperatureMetricName.cpuHottest
+                ),
+                TemperatureMetricName.memoryProximity: unsupportedSample(
+                    sessionID: sessionID,
+                    timestamp: timestamp,
+                    metricName: TemperatureMetricName.memoryProximity
+                )
+            ],
+            capabilitiesByDomain: [
+                .cpu: capability(sessionID: sessionID, domain: .cpu, source: .hidSensors, supported: true, readable: true, reasonCode: "ok", timestamp: timestamp),
+                .memory: capability(sessionID: sessionID, domain: .memory, source: .smc, supported: false, readable: false, reasonCode: "unsupported", timestamp: timestamp),
+                .ssd: capability(sessionID: sessionID, domain: .ssd, source: .nvmeSMART, supported: false, readable: false, reasonCode: "readFailed", timestamp: timestamp),
+            ],
+            hottestValidSample: nil
+        )
+
+        let snapshot = TemperatureDashboardSnapshot(liveState: state)
+
+        XCTAssertEqual(snapshot.hottestTitle, "--°C")
+        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .cpu })?.statusText, "Stale")
+        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .memory })?.statusText, "Unsupported")
+    }
 }
 
 private func capability(
@@ -101,7 +149,7 @@ private func capability(
     readable: Bool,
     reasonCode: String,
     timestamp: Date
-) -> TemperatureCapability {
+    ) -> TemperatureCapability {
     TemperatureCapability(
         id: UUID(),
         sessionID: sessionID,
@@ -114,5 +162,41 @@ private func capability(
         rawKey: nil,
         detectedAt: timestamp,
         updatedAt: timestamp
+    )
+}
+
+private func staleSample(
+    sessionID: UUID,
+    timestamp: Date,
+    metricName: String
+) -> TemperatureSample {
+    try! TemperatureSample.makeInvalid(
+        sessionID: sessionID,
+        timestamp: timestamp,
+        metricName: metricName,
+        domain: .cpu,
+        deviceID: "cpu",
+        displayName: "CPU",
+        quality: .stale,
+        source: .hidSensors,
+        errorCode: "stale"
+    )
+}
+
+private func unsupportedSample(
+    sessionID: UUID,
+    timestamp: Date,
+    metricName: String
+) -> TemperatureSample {
+    try! TemperatureSample.makeInvalid(
+        sessionID: sessionID,
+        timestamp: timestamp,
+        metricName: metricName,
+        domain: .memory,
+        deviceID: "memory",
+        displayName: "Memory",
+        quality: .unsupported,
+        source: .smc,
+        errorCode: "unsupported"
     )
 }

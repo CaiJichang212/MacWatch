@@ -3,7 +3,7 @@ import MacWatchCore
 import XCTest
 @testable import MacWatchApp
 
-final class MacWatchRuntimeTests: XCTestCase {
+final class MacWatchRuntimeSchedulerTests: XCTestCase {
     @MainActor
     func testRuntimeStartsAndPublishesSchedulerSamplesAndCapabilities() async throws {
         let repository = InMemorySessionHistoryRepository()
