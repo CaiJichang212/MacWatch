@@ -1,118 +1,96 @@
 import AppKit
 import MacWatchCore
+import SwiftUI
 
-enum MenuBarTemperatureFormatter {
-    static func title(forCelsius valueCelsius: Double) -> String {
-        "\(Int(valueCelsius.rounded()))°C"
-    }
-
-    static func title(forUnavailableMetric domain: TemperatureDomain) -> String {
-        "--°C"
-    }
-
-    static func title(for sample: TemperatureSample?) -> String {
-        guard let sample,
-              sample.quality == .valid,
-              let valueCelsius = sample.valueCelsius else {
-            return title(forUnavailableMetric: .cpu)
-        }
-
-        return title(forCelsius: valueCelsius)
-    }
-}
-
+@MainActor
 final class MenuBarController: NSObject {
     private let statusItem: NSStatusItem
-    private let commandHandler: MenuBarCommandHandler
-    private var liveState: LiveTemperatureState?
+    private let runtime: MacWatchRuntime
+    private let popover = NSPopover()
 
     init(
-        openMainWindow: @escaping () -> Void,
+        runtime: MacWatchRuntime,
+        openDashboard: @escaping () -> Void,
+        openCompatibility: @escaping () -> Void,
         openSettings: @escaping () -> Void,
         quitApplication: @escaping () -> Void
     ) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        commandHandler = MenuBarCommandHandler(
-            openMainWindow: openMainWindow,
-            openSettings: openSettings,
-            quitApplication: quitApplication
-        )
+        self.runtime = runtime
+        self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
+
+        let popupView = MenuBarPopupView(
+            openDashboard: { [weak self] in
+                self?.closePopover()
+                openDashboard()
+            },
+            openCompatibility: { [weak self] in
+                self?.closePopover()
+                openCompatibility()
+            },
+            openSettings: { [weak self] in
+                self?.closePopover()
+                openSettings()
+            },
+            quitApplication: { [weak self] in
+                self?.closePopover()
+                quitApplication()
+            }
+        )
+        .environmentObject(runtime)
+
+        popover.behavior = .transient
+        popover.contentSize = NSSize(width: 360, height: 420)
+        popover.contentViewController = NSHostingController(rootView: popupView)
+
         configureStatusItem()
     }
 
-    func update(liveState: LiveTemperatureState?) {
-        self.liveState = liveState
-        statusItem.button?.title = MenuBarTemperatureFormatter.title(for: liveState?.hottestValidSample)
-        statusItem.menu = buildMenu()
+    func update(liveState: LiveTemperatureState?, settings: AppSettings) {
+        let title = MenuBarTitleFormatter.title(liveState: liveState, settings: settings)
+        apply(title: title)
+    }
+
+    @objc
+    private func togglePopover(_ sender: Any?) {
+        guard let button = statusItem.button else {
+            return
+        }
+
+        if popover.isShown {
+            closePopover()
+        } else {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
+        }
+    }
+
+    private func closePopover() {
+        popover.performClose(nil)
     }
 
     private func configureStatusItem() {
-        statusItem.button?.title = MenuBarTemperatureFormatter.title(forUnavailableMetric: .cpu)
-        statusItem.menu = buildMenu()
+        guard let button = statusItem.button else {
+            return
+        }
+
+        button.target = self
+        button.action = #selector(togglePopover(_:))
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        apply(title: MenuBarTitleFormatter.title(liveState: runtime.liveState, settings: runtime.settings))
     }
 
-    private func buildMenu() -> NSMenu {
-        let menu = NSMenu()
-        let cpuItem = NSMenuItem(
-            title: cpuStatusText(),
-            action: nil,
-            keyEquivalent: ""
+    private func apply(title: TemperatureDisplayText) {
+        guard let button = statusItem.button else {
+            return
+        }
+
+        button.attributedTitle = NSAttributedString(
+            string: title.fullText,
+            attributes: [
+                .foregroundColor: title.isStale ? NSColor.secondaryLabelColor : NSColor.labelColor
+            ]
         )
-        cpuItem.isEnabled = false
-        menu.addItem(cpuItem)
-
-        let updatedItem = NSMenuItem(
-            title: updatedAtText(),
-            action: nil,
-            keyEquivalent: ""
-        )
-        updatedItem.isEnabled = false
-        menu.addItem(updatedItem)
-
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Open MacWatch", action: #selector(MenuBarCommandHandler.openMainWindow), keyEquivalent: "o"))
-        menu.addItem(NSMenuItem(title: "Settings", action: #selector(MenuBarCommandHandler.openSettings), keyEquivalent: ","))
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit MacWatch", action: #selector(MenuBarCommandHandler.quitApplication), keyEquivalent: "q"))
-
-        for item in menu.items {
-            item.target = commandHandler
-        }
-
-        return menu
+        button.alphaValue = title.isStale ? 0.72 : 1.0
     }
-
-    private func cpuStatusText() -> String {
-        let sample = liveState?.samplesByMetricName[TemperatureMetricName.cpuHottest]
-        guard let sample else {
-            return "CPU: waiting for data"
-        }
-
-        switch sample.quality {
-        case .valid:
-            return "CPU: \(MenuBarTemperatureFormatter.title(for: sample))"
-        case .unsupported:
-            return "CPU: unsupported"
-        case .readFailed:
-            return "CPU: read failed"
-        case .stale:
-            return "CPU: stale"
-        }
-    }
-
-    private func updatedAtText() -> String {
-        guard let updatedAt = liveState?.updatedAt else {
-            return "Updated: --"
-        }
-
-        return "Updated: \(Self.timeFormatter.string(from: updatedAt))"
-    }
-
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .medium
-        formatter.dateStyle = .none
-        return formatter
-    }()
 }
