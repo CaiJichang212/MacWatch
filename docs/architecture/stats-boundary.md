@@ -37,3 +37,9 @@
 - `StatsAdapter` 不访问网络。
 - `StatsAdapter` 不持有 UI 状态。
 - 阶段 1 不 import 或编译 `Vendor/Stats` 源码。
+
+## Verification
+
+- `./scripts/build.sh` 用于验证阶段 1 工程骨架可构建。
+- `./scripts/test.sh` 用于验证单元测试和边界扫描一起通过。
+- `./scripts/verify_stats_boundary.sh` 用于独立验证禁止接入项没有进入生产/测试源码。
