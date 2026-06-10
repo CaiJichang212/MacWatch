@@ -4,6 +4,7 @@ import StatsAdapter
 
 enum MacWatchSharedDependencies {
     static let sessionHistoryRepository: SessionHistoryRepository = makeSessionHistoryRepository()
+    static let settingsStore: SettingsStore = UserDefaultsSettingsStore()
 
     private static func makeSessionHistoryRepository() -> SessionHistoryRepository {
         do {
@@ -65,31 +66,52 @@ struct StatsAdapterTemperatureProbeProvider: MacWatchTemperatureProbeProviding {
 final class MacWatchRuntime: ObservableObject {
     @Published private(set) var currentSession: MonitoringSession?
     @Published private(set) var liveState: LiveTemperatureState?
+    @Published private(set) var settings: AppSettings
     @Published private(set) var historyRevision: Int = 0
     @Published private(set) var historyErrorMessage: String?
 
     var stateDidChange: ((LiveTemperatureState?) -> Void)?
+    var settingsDidChange: ((AppSettings) -> Void)?
 
     private let repository: SessionHistoryRepository
+    private let settingsStore: SettingsStore
     private let bus: SampleBus
     private let capabilityService: TemperatureCapabilityService
     private let liveTemperatureStore: LiveTemperatureStore
-    private let scheduler: TemperatureScheduler
+    private let schedulerBuilder: any TemperatureSchedulerBuilding
+    private let seriesQueryExecutor: TemperatureSeriesQueryExecutor
+    private var scheduler: any TemperatureScheduling
     private let clock: @Sendable () -> Date
+    private let probes: [any TemperatureProbe]
+    private let fastDomains: Set<TemperatureDomain>
+    private let fastSampleIntervalOverride: TimeInterval?
+    private let slowSampleIntervalOverride: TimeInterval?
     private var didSubscribe = false
+    private var schedulerRestartGeneration = 0
+    private var schedulerRestartTask: Task<Void, Never>?
 
     init(
         sessionHistoryRepository: SessionHistoryRepository = MacWatchSharedDependencies.sessionHistoryRepository,
+        settingsStore: SettingsStore = MacWatchSharedDependencies.settingsStore,
         probeProvider: MacWatchTemperatureProbeProviding = StatsAdapterTemperatureProbeProvider(),
-        fastSampleInterval: TimeInterval = 5,
-        slowSampleInterval: TimeInterval = 30,
+        schedulerBuilder: any TemperatureSchedulerBuilding = LiveTemperatureSchedulerBuilder(),
+        fastSampleInterval: TimeInterval? = nil,
+        slowSampleInterval: TimeInterval? = nil,
         clock: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.repository = sessionHistoryRepository
+        self.settingsStore = settingsStore
+        self.schedulerBuilder = schedulerBuilder
+        self.seriesQueryExecutor = TemperatureSeriesQueryExecutor(repository: sessionHistoryRepository)
         self.clock = clock
+        self.settings = settingsStore.load()
+        self.fastSampleIntervalOverride = fastSampleInterval
+        self.slowSampleIntervalOverride = slowSampleInterval
 
         let fastProbes = probeProvider.makeFastProbes()
         let probes = probeProvider.makeProbes()
+        self.probes = probes
+        self.fastDomains = Set(fastProbes.map(\.domain))
         self.bus = SampleBus()
         self.liveTemperatureStore = LiveTemperatureStore()
         self.capabilityService = TemperatureCapabilityService(
@@ -97,34 +119,8 @@ final class MacWatchRuntime: ObservableObject {
             repository: sessionHistoryRepository,
             clock: clock
         )
-
-        let fastDomains = Set(fastProbes.map(\.domain))
-        let policyByDomain = Dictionary(uniqueKeysWithValues: probes.map { probe in
-            let requestedInterval = fastDomains.contains(probe.domain)
-                ? fastSampleInterval
-                : slowSampleInterval
-
-            let policy = TemperatureSamplingPolicy.default(
-                for: probe.domain,
-                userRealtimeInterval: requestedInterval
-            )
-            return (probe.domain, policy)
-        })
-
-        let minRealtime = policyByDomain.values.map(\.realtimeInterval).min() ?? 5
-        let minimumTickInterval = max(0.005, minRealtime / 2)
-        let policyForDomain: (TemperatureDomain) -> TemperatureSamplingPolicy = { domain in
-            policyByDomain[domain] ?? TemperatureSamplingPolicy.default(for: domain)
-        }
-
-        self.scheduler = TemperatureScheduler(
-            probes: probes,
-            capabilityService: capabilityService,
-            bus: bus,
-            clock: clock,
-            minimumTickInterval: minimumTickInterval,
-            policyForDomain: policyForDomain
-        )
+        self.scheduler = makeNoopTemperatureScheduler()
+        self.scheduler = makeScheduler()
     }
 
     func start() {
@@ -139,10 +135,7 @@ final class MacWatchRuntime: ObservableObject {
             return
         }
 
-        Task {
-            await ensureBusSubscription()
-            await scheduler.start(sessionID: session.id)
-        }
+        scheduleSchedulerRestart(sessionID: session.id)
     }
 
     func handleLifecycleEvent(_ event: AppLifecycleEvent) {
@@ -193,6 +186,31 @@ final class MacWatchRuntime: ObservableObject {
         }
     }
 
+    func loadSeries(
+        domain: TemperatureDomain,
+        metricName: String,
+        range: TemperatureHistoryRange = .oneHour,
+        maxPoints: Int = 240
+    ) async -> TemperatureSeries? {
+        guard let session = currentSession else {
+            return nil
+        }
+
+        do {
+            return try await seriesQueryExecutor.query(
+                sessionID: session.id,
+                domain: domain,
+                metricName: metricName,
+                range: range,
+                now: clock(),
+                maxPoints: maxPoints
+            )
+        } catch {
+            assertionFailure("Failed to load trend data: \(error)")
+            return nil
+        }
+    }
+
     func clearCurrentSessionHistory() {
         do {
             try repository.clearCurrentSessionHistory(at: clock())
@@ -202,6 +220,42 @@ final class MacWatchRuntime: ObservableObject {
             historyErrorMessage = error.localizedDescription
             assertionFailure("Failed to clear session history: \(error)")
         }
+    }
+
+    func updateSettings(_ transform: (inout AppSettings) -> Void) {
+        var updatedSettings = settings
+        transform(&updatedSettings)
+
+        guard updatedSettings != settings else {
+            return
+        }
+
+        let previousRefreshInterval = settings.refreshInterval
+        settings = updatedSettings
+        settingsStore.save(updatedSettings)
+        settingsDidChange?(updatedSettings)
+
+        if updatedSettings.refreshInterval != previousRefreshInterval {
+            applyRefreshInterval(updatedSettings.refreshInterval)
+        }
+    }
+
+    func applyRefreshInterval(_ interval: RefreshInterval) {
+        if settings.refreshInterval != interval {
+            settings.refreshInterval = interval
+            settingsStore.save(settings)
+            settingsDidChange?(settings)
+        }
+
+        guard let session = currentSession else {
+            return
+        }
+
+        scheduleSchedulerRestart(sessionID: session.id)
+    }
+
+    func effectiveRealtimeInterval(for domain: TemperatureDomain) -> TimeInterval {
+        effectiveSamplingPolicy(for: domain).realtimeInterval
     }
 
     private func ensureBusSubscription() async {
@@ -220,9 +274,11 @@ final class MacWatchRuntime: ObservableObject {
 
         switch event {
         case let .samples(samples, context) where context.shouldWriteHistory:
+            var wroteHistory = false
             for sample in samples {
                 do {
                     try repository.insertSample(sample)
+                    wroteHistory = true
                 } catch {
                     await recordHistoryWriteFailure(
                         sessionID: context.sessionID,
@@ -233,11 +289,17 @@ final class MacWatchRuntime: ObservableObject {
                     )
                 }
             }
+            if wroteHistory {
+                historyRevision += 1
+                historyErrorMessage = nil
+            }
         case .samples:
             return
         case let .gap(event):
             do {
                 try repository.insertTimelineEvent(event)
+                historyRevision += 1
+                historyErrorMessage = nil
             } catch {
                 await recordHistoryWriteFailure(
                     sessionID: event.sessionID,
@@ -281,6 +343,80 @@ final class MacWatchRuntime: ObservableObject {
     private func apply(state: LiveTemperatureState) {
         liveState = state
         stateDidChange?(state)
+    }
+
+    private func makeScheduler() -> any TemperatureScheduling {
+        let minimumTickInterval = max(
+            0.005,
+            probes.map { effectiveSamplingPolicy(for: $0.domain).realtimeInterval }.min().map { $0 / 2 } ?? 2.5
+        )
+
+        return schedulerBuilder.makeScheduler(
+            probes: probes,
+            capabilityService: capabilityService,
+            bus: bus,
+            clock: clock,
+            minimumTickInterval: minimumTickInterval,
+            policyForDomain: { [weak self] domain in
+                self?.effectiveSamplingPolicy(for: domain) ?? TemperatureSamplingPolicy.default(for: domain)
+            }
+        )
+    }
+
+    private func effectiveSamplingPolicy(for domain: TemperatureDomain) -> TemperatureSamplingPolicy {
+        TemperatureSamplingPolicy.default(
+            for: domain,
+            userRealtimeInterval: requestedRealtimeInterval(for: domain)
+        )
+    }
+
+    private func requestedRealtimeInterval(for domain: TemperatureDomain) -> TimeInterval {
+        if fastDomains.contains(domain) {
+            return fastSampleIntervalOverride ?? settings.refreshInterval.rawValue
+        }
+
+        switch domain {
+        case .memory, .ssd, .battery:
+            return slowSampleIntervalOverride ?? max(settings.refreshInterval.rawValue, RefreshInterval.thirtySeconds.rawValue)
+        case .system, .sensor:
+            return slowSampleIntervalOverride ?? max(settings.refreshInterval.rawValue, RefreshInterval.tenSeconds.rawValue)
+        case .cpu, .gpu:
+            return fastSampleIntervalOverride ?? settings.refreshInterval.rawValue
+        }
+    }
+
+    private func scheduleSchedulerRestart(sessionID: UUID) {
+        schedulerRestartGeneration += 1
+        let generation = schedulerRestartGeneration
+        schedulerRestartTask?.cancel()
+        schedulerRestartTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+            await self.restartScheduler(sessionID: sessionID, generation: generation)
+        }
+    }
+
+    private func restartScheduler(sessionID: UUID, generation: Int) async {
+        let previousScheduler = scheduler
+        await previousScheduler.stop(at: clock())
+        guard generation == schedulerRestartGeneration else {
+            return
+        }
+
+        let newScheduler = makeScheduler()
+        scheduler = newScheduler
+        await ensureBusSubscription()
+        guard generation == schedulerRestartGeneration else {
+            await newScheduler.stop(at: clock())
+            return
+        }
+
+        await newScheduler.start(sessionID: sessionID)
+        guard generation == schedulerRestartGeneration else {
+            await newScheduler.stop(at: clock())
+            return
+        }
     }
 
 }
