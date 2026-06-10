@@ -26,6 +26,15 @@ let package = Package(
             name: "StatsAdapter",
             dependencies: [
                 "MacWatchCore",
+                "StatsAdapterIOHID",
+            ]
+        ),
+        .target(
+            name: "StatsAdapterIOHID",
+            publicHeadersPath: "include",
+            linkerSettings: [
+                .linkedFramework("Foundation"),
+                .linkedFramework("IOKit"),
             ]
         ),
         .testTarget(
