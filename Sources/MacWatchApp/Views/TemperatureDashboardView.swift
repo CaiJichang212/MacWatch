@@ -22,10 +22,13 @@ struct TemperatureDashboardView: View {
                     title: "\(title(for: selectedTrendDomain)) Session Trend",
                     series: runtime.series(
                         domain: selectedTrendDomain,
-                        metricName: metricName(for: selectedTrendDomain)
+                        metricName: metricName(for: selectedTrendDomain),
+                        range: .oneHour
                     ),
                     fallbackText: snapshot.rows.first(where: { $0.domain == selectedTrendDomain })?.statusText ?? "No samples yet"
                 )
+
+                TemperatureDetailView(domain: selectedTrendDomain)
             }
             .padding(24)
         }

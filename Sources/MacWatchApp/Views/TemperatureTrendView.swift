@@ -14,7 +14,7 @@ struct TemperatureTrendView: View {
 
             if let series, validSamples(series).isEmpty == false {
                 Chart {
-                    ForEach(Array(segmentedSamples(series).enumerated()), id: \.offset) { _, segment in
+                    ForEach(Array(TemperatureTrendSegments.segments(for: series).enumerated()), id: \.offset) { _, segment in
                         ForEach(segment) { sample in
                             if let valueCelsius = sample.valueCelsius {
                                 LineMark(
@@ -49,42 +49,16 @@ struct TemperatureTrendView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    private func segmentedSamples(_ series: TemperatureSeries) -> [[TemperatureSample]] {
-        let samples = validSamples(series)
-        guard samples.isEmpty == false else {
-            return []
-        }
-
-        guard series.gaps.isEmpty == false else {
-            return [samples]
-        }
-
-        let gaps = series.gaps.sorted { $0.startedAt < $1.startedAt }
-        var segments: [[TemperatureSample]] = []
-        var currentSegment: [TemperatureSample] = []
-        var gapIndex = 0
-
-        for sample in samples {
-            while gapIndex < gaps.count,
-                  (gaps[gapIndex].endedAt ?? gaps[gapIndex].startedAt) < sample.timestamp {
-                if currentSegment.isEmpty == false {
-                    segments.append(currentSegment)
-                    currentSegment = []
-                }
-                gapIndex += 1
-            }
-
-            currentSegment.append(sample)
-        }
-
-        if currentSegment.isEmpty == false {
-            segments.append(currentSegment)
-        }
-
-        return segments
-    }
-
     private func validSamples(_ series: TemperatureSeries) -> [TemperatureSample] {
         series.samples.filter { $0.quality == .valid && $0.valueCelsius != nil }
+    }
+}
+
+enum TemperatureTrendSegments {
+    static func segments(for series: TemperatureSeries) -> [[TemperatureSample]] {
+        TemperatureSeriesDownsampler().validSegments(
+            samples: series.samples,
+            gaps: series.gaps
+        )
     }
 }
