@@ -39,9 +39,14 @@ declare -a FORBIDDEN_PATTERNS=(
     "OAuth"
     "Updater"
     "LevelDB"
+    "Network.framework"
     "Widget"
     "LaunchAtLogin"
     "SMC.Helper"
+    "SMC helper"
+    "privileged helper"
+    "URLSession"
+    "URLRequest"
     "UserNotifications"
 )
 
