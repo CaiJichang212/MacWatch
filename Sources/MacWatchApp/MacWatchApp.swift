@@ -1,10 +1,15 @@
-import MacWatchCore
-import StatsAdapter
+import SwiftUI
 
 @main
-struct MacWatchAppBootstrap {
-    static func main() {
-        _ = AppSettings.default
-        _ = StatsAdapterBoundary.placeholder
+struct MacWatchApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
+    var body: some Scene {
+        WindowGroup(id: "main") {
+            ContentView()
+        }
+        Settings {
+            SettingsView()
+        }
     }
 }
