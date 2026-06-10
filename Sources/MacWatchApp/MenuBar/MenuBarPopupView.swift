@@ -82,5 +82,8 @@ struct MenuBarPopupView: View {
         }
         .padding(14)
         .frame(width: 360)
+        .onAppear {
+            AcceptanceCoordinator.shared.recordViewAppeared(.popup)
+        }
     }
 }

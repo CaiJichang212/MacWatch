@@ -60,13 +60,19 @@ final class MenuBarController: NSObject {
         if popover.isShown {
             closePopover()
         } else {
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+            showPopover(relativeTo: button)
         }
     }
 
     private func closePopover() {
         popover.performClose(nil)
+    }
+
+    func showPopoverForAcceptance() {
+        guard let button = statusItem.button else {
+            return
+        }
+        showPopover(relativeTo: button)
     }
 
     private func configureStatusItem() {
@@ -92,5 +98,10 @@ final class MenuBarController: NSObject {
             ]
         )
         button.alphaValue = title.isStale ? 0.72 : 1.0
+    }
+
+    private func showPopover(relativeTo button: NSStatusBarButton) {
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
     }
 }
