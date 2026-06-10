@@ -10,4 +10,12 @@ final class StatsAdapterBoundaryTests: XCTestCase {
             .nvmeSMART,
         ])
     }
+
+    func testBoundaryDeclaresForbiddenCapabilities() {
+        XCTAssertTrue(StatsAdapterBoundary.stageOne.prohibitedCapabilities.contains("Remote"))
+        XCTAssertTrue(StatsAdapterBoundary.stageOne.prohibitedCapabilities.contains("Updater"))
+        XCTAssertTrue(StatsAdapterBoundary.stageOne.prohibitedCapabilities.contains("LevelDB"))
+        XCTAssertTrue(StatsAdapterBoundary.stageOne.prohibitedCapabilities.contains("Widget"))
+        XCTAssertTrue(StatsAdapterBoundary.stageOne.prohibitedCapabilities.contains("Stats.Module lifecycle"))
+    }
 }
