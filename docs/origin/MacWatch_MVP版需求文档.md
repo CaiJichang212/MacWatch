@@ -52,7 +52,7 @@
 
 文档版本：v0.1  
 项目名称：MacWatch  
-目标平台：macOS 12 Monterey 及以上  
+目标平台：macOS 13 Ventura 及以上  
 目标机型：MacBook Air M 系列笔记本  
 编写日期：2026-06-09  
 文档定位：原始需求文档的 MVP 收敛版，不替代完整 v1 产品愿景

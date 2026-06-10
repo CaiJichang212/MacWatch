@@ -63,7 +63,7 @@
 
 文档版本：v2.0
 项目名称：MacWatch
-目标平台：macOS 12 Monterey 及以上
+目标平台：macOS 13 Ventura 及以上
 参考项目：Stats 源码，固定在 `Vendor/Stats`
 编写日期：2026-06-08
 修订日期：2026-06-10

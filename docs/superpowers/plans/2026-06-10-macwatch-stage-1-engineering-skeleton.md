@@ -6,7 +6,7 @@
 
 **Architecture:** 第一阶段只搭建 SwiftPM 工程、macOS App 场景、App 生命周期入口、测试与边界检查，不实现真实温度采集。`MacWatchApp` 只依赖 `MacWatchCore` 和 `StatsAdapter` 的公开契约；`MacWatchCore` 不依赖 AppKit/SwiftUI；`StatsAdapter` 只作为未来只读采集适配层，禁止接入 Stats `Reader`、`DB.shared`、Remote、Updater、通知或 helper。
 
-**Tech Stack:** Swift Package Manager, Swift, SwiftUI, AppKit `NSStatusItem`, XCTest, shell scripts, macOS 12+.
+**Tech Stack:** Swift Package Manager, Swift, SwiftUI, AppKit `NSStatusItem`, XCTest, shell scripts, macOS 13 Ventura 及以上。
 
 ---
 
@@ -192,7 +192,7 @@ public enum StatsReadOnlySource: String, CaseIterable, Sendable {
 
 - [ ] **Step 1: 写入 SwiftPM target 契约**
 
-  `Package.swift` 只声明产品、targets、macOS 12 平台和依赖关系。关键约束是 `MacWatchCore` 不依赖任何本地 target，`StatsAdapter` 只依赖 `MacWatchCore`，`MacWatchApp` 依赖二者。
+  `Package.swift` 只声明产品、targets、macOS 13 平台和依赖关系。关键约束是 `MacWatchCore` 不依赖任何本地 target，`StatsAdapter` 只依赖 `MacWatchCore`，`MacWatchApp` 依赖二者。
 
   关键摘要：
 
