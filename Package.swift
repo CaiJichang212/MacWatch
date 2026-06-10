@@ -20,7 +20,10 @@ let package = Package(
             ]
         ),
         .target(
-            name: "MacWatchCore"
+            name: "MacWatchCore",
+            linkerSettings: [
+                .linkedLibrary("sqlite3"),
+            ]
         ),
         .target(
             name: "StatsAdapter",

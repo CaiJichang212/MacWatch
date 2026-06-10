@@ -27,6 +27,7 @@ struct MacWatchApp: App {
         }
         Settings {
             SettingsView()
+                .environmentObject(appDelegate.runtime)
         }
     }
 }

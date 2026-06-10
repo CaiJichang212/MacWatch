@@ -3,7 +3,28 @@ import MacWatchCore
 import StatsAdapter
 
 enum MacWatchSharedDependencies {
-    static let sessionHistoryRepository = InMemorySessionHistoryRepository()
+    static let sessionHistoryRepository: SessionHistoryRepository = makeSessionHistoryRepository()
+
+    private static func makeSessionHistoryRepository() -> SessionHistoryRepository {
+        do {
+            let appSupport = try FileManager.default.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            let databaseURL = appSupport
+                .appending(path: "MacWatch", directoryHint: .isDirectory)
+                .appending(path: "session-history")
+                .appendingPathExtension("sqlite")
+            let store = SQLiteSessionHistoryStore(databaseURL: databaseURL)
+            try store.initialize()
+            return SQLiteSessionHistoryRepository(store: store)
+        } catch {
+            assertionFailure("Falling back to in-memory history repository: \(error)")
+            return InMemorySessionHistoryRepository()
+        }
+    }
 }
 
 protocol MacWatchTemperatureProbeProviding {
@@ -44,6 +65,8 @@ struct StatsAdapterTemperatureProbeProvider: MacWatchTemperatureProbeProviding {
 final class MacWatchRuntime: ObservableObject {
     @Published private(set) var currentSession: MonitoringSession?
     @Published private(set) var liveState: LiveTemperatureState?
+    @Published private(set) var historyRevision: Int = 0
+    @Published private(set) var historyErrorMessage: String?
 
     var stateDidChange: ((LiveTemperatureState?) -> Void)?
 
@@ -148,30 +171,36 @@ final class MacWatchRuntime: ObservableObject {
     func series(
         domain: TemperatureDomain,
         metricName: String,
-        window: TimeInterval = 3600,
+        range: TemperatureHistoryRange = .oneHour,
         maxPoints: Int = 240
     ) -> TemperatureSeries? {
         guard let session = currentSession else {
             return nil
         }
 
-        let end = clock()
-        let cutoff = end.addingTimeInterval(-window)
-        let start = session.startedAt > cutoff ? session.startedAt : cutoff
-
         do {
-            let query = try TemperatureQuery(
+            return try repository.query(
                 sessionID: session.id,
-                domains: [domain],
-                metricNames: [metricName],
-                start: start,
-                end: end,
+                domain: domain,
+                metricName: metricName,
+                range: range,
+                now: clock(),
                 maxPoints: maxPoints
             )
-            return try repository.query(query).first
         } catch {
             assertionFailure("Failed to load trend data: \(error)")
             return nil
+        }
+    }
+
+    func clearCurrentSessionHistory() {
+        do {
+            try repository.clearCurrentSessionHistory(at: clock())
+            historyRevision += 1
+            historyErrorMessage = nil
+        } catch {
+            historyErrorMessage = error.localizedDescription
+            assertionFailure("Failed to clear session history: \(error)")
         }
     }
 

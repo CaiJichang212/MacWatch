@@ -37,7 +37,7 @@ public enum SQLiteSchema {
                 "created_at_ms",
             ],
             sql: """
-            CREATE TABLE monitoring_session (
+            CREATE TABLE IF NOT EXISTS monitoring_session (
                 id TEXT PRIMARY KEY,
                 started_at_ms INTEGER NOT NULL,
                 ended_at_ms INTEGER,
@@ -68,7 +68,7 @@ public enum SQLiteSchema {
                 "created_at_ms",
             ],
             sql: """
-            CREATE TABLE temperature_sample (
+            CREATE TABLE IF NOT EXISTS temperature_sample (
                 id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
                 timestamp_ms INTEGER NOT NULL,
@@ -103,7 +103,7 @@ public enum SQLiteSchema {
                 "updated_at_ms",
             ],
             sql: """
-            CREATE TABLE temperature_capability (
+            CREATE TABLE IF NOT EXISTS temperature_capability (
                 id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
                 domain TEXT NOT NULL,
@@ -134,7 +134,7 @@ public enum SQLiteSchema {
                 "created_at_ms",
             ],
             sql: """
-            CREATE TABLE timeline_event (
+            CREATE TABLE IF NOT EXISTS timeline_event (
                 id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
                 event_type TEXT NOT NULL,
@@ -155,28 +155,28 @@ public enum SQLiteSchema {
         SQLiteCreateIndexStatement(
             indexName: "idx_temperature_sample_session_metric_time",
             sql: """
-            CREATE INDEX idx_temperature_sample_session_metric_time
+            CREATE INDEX IF NOT EXISTS idx_temperature_sample_session_metric_time
             ON temperature_sample(session_id, metric_name, timestamp_ms);
             """
         ),
         SQLiteCreateIndexStatement(
             indexName: "idx_temperature_sample_session_domain_time",
             sql: """
-            CREATE INDEX idx_temperature_sample_session_domain_time
+            CREATE INDEX IF NOT EXISTS idx_temperature_sample_session_domain_time
             ON temperature_sample(session_id, domain, timestamp_ms);
             """
         ),
         SQLiteCreateIndexStatement(
             indexName: "idx_temperature_capability_session_domain",
             sql: """
-            CREATE INDEX idx_temperature_capability_session_domain
+            CREATE INDEX IF NOT EXISTS idx_temperature_capability_session_domain
             ON temperature_capability(session_id, domain);
             """
         ),
         SQLiteCreateIndexStatement(
             indexName: "idx_timeline_event_session_time",
             sql: """
-            CREATE INDEX idx_timeline_event_session_time
+            CREATE INDEX IF NOT EXISTS idx_timeline_event_session_time
             ON timeline_event(session_id, started_at_ms, ended_at_ms);
             """
         ),
