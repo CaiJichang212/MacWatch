@@ -9,6 +9,23 @@ enum MacWatchSharedDependencies {
 protocol MacWatchTemperatureProbeProviding {
     func makeFastProbes() -> [any TemperatureProbe]
     func makeSlowProbes() -> [any TemperatureProbe]
+    func makeSystemProbes() -> [any TemperatureProbe]
+    func makeSensorProbes() -> [any TemperatureProbe]
+    func makeProbes() -> [any TemperatureProbe]
+}
+
+extension MacWatchTemperatureProbeProviding {
+    func makeSystemProbes() -> [any TemperatureProbe] {
+        []
+    }
+
+    func makeSensorProbes() -> [any TemperatureProbe] {
+        []
+    }
+
+    func makeProbes() -> [any TemperatureProbe] {
+        makeFastProbes() + makeSlowProbes() + makeSystemProbes() + makeSensorProbes()
+    }
 }
 
 struct StatsAdapterTemperatureProbeProvider: MacWatchTemperatureProbeProviding {
@@ -31,13 +48,12 @@ final class MacWatchRuntime: ObservableObject {
     var stateDidChange: ((LiveTemperatureState?) -> Void)?
 
     private let repository: SessionHistoryRepository
-    private let fastMonitorService: TemperatureMonitorService
-    private let slowMonitorService: TemperatureMonitorService
-    private let fastSampleInterval: TimeInterval
-    private let slowSampleInterval: TimeInterval
+    private let bus: SampleBus
+    private let capabilityService: TemperatureCapabilityService
+    private let liveTemperatureStore: LiveTemperatureStore
+    private let scheduler: TemperatureScheduler
     private let clock: @Sendable () -> Date
-    private var fastTimer: Timer?
-    private var slowTimer: Timer?
+    private var didSubscribe = false
 
     init(
         sessionHistoryRepository: SessionHistoryRepository = MacWatchSharedDependencies.sessionHistoryRepository,
@@ -47,24 +63,45 @@ final class MacWatchRuntime: ObservableObject {
         clock: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.repository = sessionHistoryRepository
-        self.fastMonitorService = TemperatureMonitorService(
-            probes: probeProvider.makeFastProbes(),
-            repository: sessionHistoryRepository,
-            clock: clock
-        )
-        self.slowMonitorService = TemperatureMonitorService(
-            probes: probeProvider.makeSlowProbes(),
-            repository: sessionHistoryRepository,
-            clock: clock
-        )
-        self.fastSampleInterval = fastSampleInterval
-        self.slowSampleInterval = slowSampleInterval
         self.clock = clock
-    }
 
-    deinit {
-        fastTimer?.invalidate()
-        slowTimer?.invalidate()
+        let fastProbes = probeProvider.makeFastProbes()
+        let probes = probeProvider.makeProbes()
+        self.bus = SampleBus()
+        self.liveTemperatureStore = LiveTemperatureStore()
+        self.capabilityService = TemperatureCapabilityService(
+            probes: probes,
+            repository: sessionHistoryRepository,
+            clock: clock
+        )
+
+        let fastDomains = Set(fastProbes.map(\.domain))
+        let policyByDomain = Dictionary(uniqueKeysWithValues: probes.map { probe in
+            let requestedInterval = fastDomains.contains(probe.domain)
+                ? fastSampleInterval
+                : slowSampleInterval
+
+            let policy = TemperatureSamplingPolicy.default(
+                for: probe.domain,
+                userRealtimeInterval: requestedInterval
+            )
+            return (probe.domain, policy)
+        })
+
+        let minRealtime = policyByDomain.values.map(\.realtimeInterval).min() ?? 5
+        let minimumTickInterval = max(0.005, minRealtime / 2)
+        let policyForDomain: (TemperatureDomain) -> TemperatureSamplingPolicy = { domain in
+            policyByDomain[domain] ?? TemperatureSamplingPolicy.default(for: domain)
+        }
+
+        self.scheduler = TemperatureScheduler(
+            probes: probes,
+            capabilityService: capabilityService,
+            bus: bus,
+            clock: clock,
+            minimumTickInterval: minimumTickInterval,
+            policyForDomain: policyForDomain
+        )
     }
 
     func start() {
@@ -80,28 +117,27 @@ final class MacWatchRuntime: ObservableObject {
         }
 
         Task {
-            let fastCapabilityState = await fastMonitorService.detectCapabilities(sessionID: session.id)
-            applyMerging(state: fastCapabilityState)
-
-            let slowCapabilityState = await slowMonitorService.detectCapabilities(sessionID: session.id)
-            applyMerging(state: slowCapabilityState)
-
-            let sampleState = await fastMonitorService.sampleOnce(sessionID: session.id)
-            applyMerging(state: sampleState)
-
-            let slowSampleState = await slowMonitorService.sampleOnce(sessionID: session.id)
-            applyMerging(state: slowSampleState)
+            await ensureBusSubscription()
+            await scheduler.start(sessionID: session.id)
         }
+    }
 
-        scheduleTimer(interval: fastSampleInterval, for: session.id) { [fastMonitorService] sessionID in
-            await fastMonitorService.sampleOnce(sessionID: sessionID)
-        } assign: { [weak self] timer in
-            self?.fastTimer = timer
-        }
-        scheduleTimer(interval: slowSampleInterval, for: session.id) { [slowMonitorService] sessionID in
-            await slowMonitorService.sampleOnce(sessionID: sessionID)
-        } assign: { [weak self] timer in
-            self?.slowTimer = timer
+    func handleLifecycleEvent(_ event: AppLifecycleEvent) {
+        switch event {
+        case .launched:
+            return
+        case .willSleep:
+            Task {
+                await scheduler.pause(reason: .systemSleep, at: clock())
+            }
+        case .didWake:
+            Task {
+                await scheduler.resume(reason: .systemWake, at: clock())
+            }
+        case .willTerminate:
+            Task {
+                await scheduler.stop(at: clock())
+            }
         }
     }
 
@@ -139,43 +175,78 @@ final class MacWatchRuntime: ObservableObject {
         }
     }
 
-    private func scheduleTimer(
-        interval: TimeInterval,
-        for sessionID: UUID,
-        sample: @escaping @Sendable (UUID) async -> LiveTemperatureState,
-        assign: (Timer) -> Void
-    ) {
-        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            guard let self else {
-                return
-            }
-
-            Task { @MainActor in
-                let nextState = await sample(sessionID)
-                self.applyMerging(state: nextState)
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        assign(timer)
-    }
-
-    private func applyMerging(state: LiveTemperatureState) {
-        guard let existing = liveState, existing.sessionID == state.sessionID else {
-            apply(state: state)
+    private func ensureBusSubscription() async {
+        guard didSubscribe == false else {
             return
         }
+        didSubscribe = true
+        _ = await bus.subscribe { [weak self] event in
+            await self?.handleBusEvent(event)
+        }
+    }
 
-        let samplesByMetricName = existing.samplesByMetricName.merging(state.samplesByMetricName) { _, new in new }
-        let capabilitiesByDomain = existing.capabilitiesByDomain.merging(state.capabilitiesByDomain) { _, new in new }
-        apply(
-            state: LiveTemperatureState(
-                sessionID: state.sessionID,
-                updatedAt: state.updatedAt ?? existing.updatedAt,
-                samplesByMetricName: samplesByMetricName,
-                capabilitiesByDomain: capabilitiesByDomain,
-                hottestValidSample: Self.hottestValidSample(from: Array(samplesByMetricName.values))
+    private func handleBusEvent(_ event: TemperatureSampleEvent) async {
+        let state = await liveTemperatureStore.apply(event)
+        apply(state: state)
+
+        switch event {
+        case let .samples(samples, context) where context.shouldWriteHistory:
+            for sample in samples {
+                do {
+                    try repository.insertSample(sample)
+                } catch {
+                    await recordHistoryWriteFailure(
+                        sessionID: context.sessionID,
+                        timestamp: context.sampledAt,
+                        domain: sample.domain,
+                        metricName: sample.metricName,
+                        message: error.localizedDescription
+                    )
+                }
+            }
+        case .samples:
+            return
+        case let .gap(event):
+            do {
+                try repository.insertTimelineEvent(event)
+            } catch {
+                await recordHistoryWriteFailure(
+                    sessionID: event.sessionID,
+                    timestamp: event.startedAt,
+                    domain: event.domain,
+                    metricName: event.metricName,
+                    message: error.localizedDescription
+                )
+            }
+        case .capabilities:
+            return
+        }
+    }
+
+    private func recordHistoryWriteFailure(
+        sessionID: UUID,
+        timestamp: Date,
+        domain: TemperatureDomain?,
+        metricName: String?,
+        message: String
+    ) async {
+        do {
+            try repository.insertTimelineEvent(
+                TimelineEvent(
+                    id: UUID(),
+                    sessionID: sessionID,
+                    eventType: .historyWriteFailed,
+                    startedAt: timestamp,
+                    endedAt: nil,
+                    domain: domain,
+                    metricName: metricName,
+                    reasonCode: "historyWriteFailed",
+                    message: message
+                )
             )
-        )
+        } catch {
+            return
+        }
     }
 
     private func apply(state: LiveTemperatureState) {
@@ -183,11 +254,4 @@ final class MacWatchRuntime: ObservableObject {
         stateDidChange?(state)
     }
 
-    private static func hottestValidSample(from samples: [TemperatureSample]) -> TemperatureSample? {
-        samples
-            .filter { $0.quality == .valid && $0.valueCelsius != nil }
-            .max { lhs, rhs in
-                (lhs.valueCelsius ?? -.infinity) < (rhs.valueCelsius ?? -.infinity)
-            }
-    }
 }
