@@ -3,6 +3,7 @@ import MacWatchCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let lifecycleCoordinator = AppLifecycleCoordinator()
+    private let windowCommandCenter = WindowCommandCenter.shared
     private var menuBarController: MenuBarController?
     private var observers: [NSObjectProtocol] = []
 
@@ -54,9 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
-        if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
-            window.makeKeyAndOrderFront(nil)
-        }
+        windowCommandCenter.openMainWindow()
     }
 
     private func openSettings() {
