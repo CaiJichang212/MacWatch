@@ -4,17 +4,20 @@ import XCTest
 @testable import MacWatchApp
 
 final class AppDelegateTests: XCTestCase {
-    func testLaunchingAppCreatesMonitoringSession() throws {
+    @MainActor
+    func testLaunchingAppCreatesMonitoringSessionWithoutStartingRuntimeWhenDisabled() async throws {
         let repository = InMemorySessionHistoryRepository()
         let appDelegate = AppDelegate(
             sessionHistoryRepository: repository,
             shouldSetupMenuBarOnLaunch: false,
-            shouldRegisterObserversOnLaunch: false
+            shouldRegisterObserversOnLaunch: false,
+            shouldStartRuntimeOnLaunch: false
         )
 
         appDelegate.applicationDidFinishLaunching(
             Notification(name: NSApplication.didFinishLaunchingNotification)
         )
+        try await Task.sleep(nanoseconds: 50_000_000)
 
         let session = try repository.currentSession()
         XCTAssertNotNil(session)
@@ -22,5 +25,7 @@ final class AppDelegateTests: XCTestCase {
             try repository.timelineEvents(sessionID: session?.id ?? UUID()).map(\.eventType),
             [.appStarted]
         )
+        XCTAssertEqual(try repository.samples(sessionID: session?.id ?? UUID()).count, 0)
+        XCTAssertEqual(try repository.capabilities(sessionID: session?.id ?? UUID()).count, 0)
     }
 }

@@ -15,6 +15,41 @@ final class StatsBoundaryScriptTests: XCTestCase {
         XCTAssertTrue(result.output.contains("Stats boundary verification failed."))
     }
 
+    func testScriptFailsWhenStageThreeForbiddenPatternsAppearInStatsAdapter() throws {
+        let forbiddenPatterns = [
+            "write(",
+            "setFanSpeed",
+            "setFanMode",
+            "unlockFanControl",
+            "resetFanControl",
+            "FanMode",
+            "DB.shared",
+            "SystemStats",
+            "Remote",
+            "Updater",
+            "LevelDB",
+            "UserNotifications",
+            "Reader<",
+            "Module(",
+        ]
+
+        for pattern in forbiddenPatterns {
+            let fixtureName = pattern
+                .replacingOccurrences(of: "(", with: "open")
+                .replacingOccurrences(of: "<", with: "lt")
+            let fixture = try makeFixture(named: "forbidden-\(fixtureName)")
+            try writeFile(
+                at: fixture.appending(path: "Sources/StatsAdapter/Adapter.swift"),
+                contents: "let forbidden = \"\(pattern)\"\n"
+            )
+
+            let result = try runBoundaryScript(root: fixture)
+
+            XCTAssertNotEqual(result.exitCode, 0, "Expected pattern \(pattern) to be rejected")
+            XCTAssertTrue(result.output.contains("Stats boundary verification failed."))
+        }
+    }
+
     func testScriptAllowsBoundaryDeclarationAndReferenceDocs() throws {
         let fixture = try makeFixture(named: "allowed-declarations")
         try writeFile(
