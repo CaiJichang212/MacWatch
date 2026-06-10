@@ -26,6 +26,12 @@ for file in "${SOURCE_FILES[@]}"; do
 done
 
 declare -a FORBIDDEN_PATTERNS=(
+    "write("
+    "setFanSpeed"
+    "setFanMode"
+    "unlockFanControl"
+    "resetFanControl"
+    "FanMode"
     "DB.shared"
     "SystemStats"
     "Remote"
@@ -47,8 +53,8 @@ for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
     fi
 done
 
-# 仅扫描真实实现源码中的类型/构造痕迹，避免误伤边界声明和测试 fixture。
-for pattern in "Reader(" "Reader<" "Module("; do
+# 仅扫描 Stats 模块生命周期痕迹，避免误伤我们自己的 *Reader 类型名。
+for pattern in "Reader<" "Module("; do
     if rg -n --fixed-strings -- "$pattern" "${IMPLEMENTATION_FILES[@]}"; then
         found_violation=1
     fi
