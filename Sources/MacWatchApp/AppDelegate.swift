@@ -99,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             assertionFailure("Failed to handle lifecycle event: \(error)")
         }
+        runtime.handleLifecycleEvent(event)
     }
 
     private func openMainWindow() {
