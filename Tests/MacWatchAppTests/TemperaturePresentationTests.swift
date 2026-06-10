@@ -139,6 +139,226 @@ final class TemperaturePresentationTests: XCTestCase {
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .cpu })?.statusText, "Stale")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .memory })?.statusText, "Unsupported")
     }
+
+    func testDetailSnapshotFormatsStatisticsAndDoesNotFabricateZeroValues() throws {
+        let sessionID = UUID()
+        let base = Date(timeIntervalSince1970: 100)
+        let series = TemperatureSeries(
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            samples: [
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base,
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 60,
+                    source: .hidSensors
+                ),
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base.addingTimeInterval(5),
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 72,
+                    source: .hidSensors
+                ),
+            ],
+            gaps: [],
+            statistics: TemperatureSeriesStatistics.compute(samples: [
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base,
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 60,
+                    source: .hidSensors
+                ),
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base.addingTimeInterval(5),
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 72,
+                    source: .hidSensors
+                ),
+            ])
+        )
+
+        let snapshot = TemperatureDetailSnapshot(
+            domainTitle: "CPU",
+            series: series,
+            fallbackText: "Read failed"
+        )
+
+        XCTAssertEqual(snapshot.currentValueText, "72°C")
+        XCTAssertEqual(snapshot.maximumText, "72°C")
+        XCTAssertEqual(snapshot.minimumText, "60°C")
+        XCTAssertEqual(snapshot.averageText, "66°C")
+        XCTAssertEqual(snapshot.statusText, "2 samples")
+    }
+
+    func testDetailSnapshotShowsFallbackWhenNoValidSamplesExist() throws {
+        let sessionID = UUID()
+        let series = TemperatureSeries(
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            samples: [
+                try TemperatureSample.makeInvalid(
+                    sessionID: sessionID,
+                    timestamp: Date(timeIntervalSince1970: 100),
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    quality: .readFailed,
+                    source: .hidSensors,
+                    errorCode: "readFailed"
+                ),
+            ],
+            gaps: [],
+            statistics: .empty
+        )
+
+        let snapshot = TemperatureDetailSnapshot(
+            domainTitle: "CPU",
+            series: series,
+            fallbackText: "Read failed"
+        )
+
+        XCTAssertEqual(snapshot.currentValueText, "--°C")
+        XCTAssertEqual(snapshot.statusText, "Read failed")
+        XCTAssertEqual(snapshot.maximumText, "--")
+        XCTAssertEqual(snapshot.averageText, "--")
+    }
+
+    func testTrendSegmentsBreakAtGapBoundaries() throws {
+        let sessionID = UUID()
+        let base = Date(timeIntervalSince1970: 100)
+        let series = TemperatureSeries(
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            samples: [
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base,
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 60,
+                    source: .hidSensors
+                ),
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base.addingTimeInterval(5),
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 62,
+                    source: .hidSensors
+                ),
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base.addingTimeInterval(20),
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 68,
+                    source: .hidSensors
+                ),
+            ],
+            gaps: [
+                TimelineEvent(
+                    id: UUID(),
+                    sessionID: sessionID,
+                    eventType: .systemSleepStarted,
+                    startedAt: base.addingTimeInterval(8),
+                    endedAt: base.addingTimeInterval(18),
+                    domain: .cpu,
+                    metricName: TemperatureMetricName.cpuHottest,
+                    reasonCode: "sleep",
+                    message: "sleep"
+                )
+            ]
+        )
+
+        let segments = TemperatureTrendSegments.segments(for: series)
+
+        XCTAssertEqual(segments.count, 2)
+        XCTAssertEqual(segments[0].count, 2)
+        XCTAssertEqual(segments[1].count, 1)
+    }
+
+    func testTrendSegmentsSplitAtGapEndBoundary() throws {
+        let sessionID = UUID()
+        let base = Date(timeIntervalSince1970: 100)
+        let series = TemperatureSeries(
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            samples: [
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base,
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 60,
+                    source: .hidSensors
+                ),
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base.addingTimeInterval(18),
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 62,
+                    source: .hidSensors
+                ),
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base.addingTimeInterval(20),
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 68,
+                    source: .hidSensors
+                ),
+            ],
+            gaps: [
+                TimelineEvent(
+                    id: UUID(),
+                    sessionID: sessionID,
+                    eventType: .systemSleepStarted,
+                    startedAt: base.addingTimeInterval(8),
+                    endedAt: base.addingTimeInterval(18),
+                    domain: .cpu,
+                    metricName: TemperatureMetricName.cpuHottest,
+                    reasonCode: "sleep",
+                    message: "sleep"
+                )
+            ]
+        )
+
+        let segments = TemperatureTrendSegments.segments(for: series)
+
+        XCTAssertEqual(segments.count, 2)
+        XCTAssertEqual(segments[0].map(\.timestamp), [base])
+        XCTAssertEqual(segments[1].map(\.timestamp), [base.addingTimeInterval(18), base.addingTimeInterval(20)])
+    }
 }
 
 private func capability(

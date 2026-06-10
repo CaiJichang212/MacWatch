@@ -314,6 +314,17 @@ private final class TestSessionHistoryRepository: SessionHistoryRepository {
     func updateTimelineEvent(id: UUID, endedAt: Date) throws {}
     func timelineEvents(sessionID: UUID) throws -> [TimelineEvent] { timelineEvents }
     func query(_ query: TemperatureQuery) throws -> [TemperatureSeries] { [] }
+    func query(
+        sessionID: UUID,
+        domain: TemperatureDomain,
+        metricName: String,
+        range: TemperatureHistoryRange,
+        now: Date,
+        maxPoints: Int
+    ) throws -> TemperatureSeries {
+        TemperatureSeries(metricName: metricName, domain: domain, samples: [], gaps: [])
+    }
+    func clearCurrentSessionHistory(at clearedAt: Date) throws {}
 }
 
 private final class FailingCapabilityInsertRepository: SessionHistoryRepository {
@@ -330,4 +341,15 @@ private final class FailingCapabilityInsertRepository: SessionHistoryRepository 
     func updateTimelineEvent(id: UUID, endedAt: Date) throws {}
     func timelineEvents(sessionID: UUID) throws -> [TimelineEvent] { timelineEvents }
     func query(_ query: TemperatureQuery) throws -> [TemperatureSeries] { [] }
+    func query(
+        sessionID: UUID,
+        domain: TemperatureDomain,
+        metricName: String,
+        range: TemperatureHistoryRange,
+        now: Date,
+        maxPoints: Int
+    ) throws -> TemperatureSeries {
+        TemperatureSeries(metricName: metricName, domain: domain, samples: [], gaps: [])
+    }
+    func clearCurrentSessionHistory(at clearedAt: Date) throws {}
 }

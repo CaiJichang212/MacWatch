@@ -169,7 +169,7 @@ final class SessionLifecycleServiceTests: XCTestCase {
         XCTAssertEqual(series[0].samples.count, 2)
         XCTAssertEqual(
             series[0].samples.map(\.timestamp),
-            [Date(timeIntervalSince1970: 14), Date(timeIntervalSince1970: 15)]
+            [Date(timeIntervalSince1970: 11), Date(timeIntervalSince1970: 15)]
         )
     }
 
