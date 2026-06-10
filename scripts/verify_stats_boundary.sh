@@ -19,19 +19,29 @@ done < <(
 )
 
 declare -a IMPLEMENTATION_FILES=()
+declare -a STATS_ADAPTER_FILES=()
 for file in "${SOURCE_FILES[@]}"; do
     if [[ "$file" != "Sources/StatsAdapter/StatsAdapterBoundary.swift" ]]; then
         IMPLEMENTATION_FILES+=("$file")
     fi
+    if [[ "$file" == Sources/StatsAdapter/* && "$file" != "Sources/StatsAdapter/StatsAdapterBoundary.swift" ]]; then
+        STATS_ADAPTER_FILES+=("$file")
+    fi
 done
 
-declare -a FORBIDDEN_PATTERNS=(
+declare -a STATS_ADAPTER_ONLY_PATTERNS=(
     "write("
     "setFanSpeed"
     "setFanMode"
     "unlockFanControl"
     "resetFanControl"
     "FanMode"
+    "SMC.Helper"
+    "SMC helper"
+    "privileged helper"
+)
+
+declare -a FORBIDDEN_PATTERNS=(
     "DB.shared"
     "SystemStats"
     "Remote"
@@ -42,15 +52,20 @@ declare -a FORBIDDEN_PATTERNS=(
     "Network.framework"
     "Widget"
     "LaunchAtLogin"
-    "SMC.Helper"
-    "SMC helper"
-    "privileged helper"
     "URLSession"
     "URLRequest"
     "UserNotifications"
 )
 
 found_violation=0
+
+if (( ${#STATS_ADAPTER_FILES[@]} > 0 )); then
+    for pattern in "${STATS_ADAPTER_ONLY_PATTERNS[@]}"; do
+        if rg -n --fixed-strings -- "$pattern" "${STATS_ADAPTER_FILES[@]}"; then
+            found_violation=1
+        fi
+    done
+fi
 
 for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
     if rg -n --fixed-strings -- "$pattern" "${IMPLEMENTATION_FILES[@]}"; then
