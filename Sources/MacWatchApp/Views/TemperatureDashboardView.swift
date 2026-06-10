@@ -26,6 +26,9 @@ struct TemperatureDashboardView: View {
             .padding(24)
         }
         .navigationTitle("Dashboard")
+        .onAppear {
+            AcceptanceCoordinator.shared.recordViewAppeared(.dashboard)
+        }
         .task(id: trendQueryKey) {
             let expectedKey = trendQueryKey
             let loaded = await runtime.loadSeries(
