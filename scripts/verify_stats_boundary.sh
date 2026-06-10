@@ -1,43 +1,39 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ $# -gt 0 ]]; then
+    ROOT_DIR="$(cd "$1" && pwd)"
+else
+    ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
 cd "$ROOT_DIR"
 
-# 参考文档和边界策略本身会显式列出禁止项，因此扫描时排除这些“说明性文件”，
-# 只对真实生产/测试源码和非参考性文档做失败判定，避免把“禁止项说明”误判成“违规接入”。
-declare -a SCAN_FILES=(
+declare -a SOURCE_FILES=(
     "Package.swift"
 )
 
 while IFS= read -r file; do
-    SCAN_FILES+=("$file")
+    SOURCE_FILES+=("$file")
 done < <(
-    find Sources Tests docs -type f \
-        \( -name "*.swift" -o -name "*.md" \) \
-        ! -path "docs/origin/*" \
-        ! -path "docs/.del_tmp/*" \
-        ! -path "docs/superpowers/*" \
-        ! -path "docs/architecture/stats-boundary.md" \
-        ! -path "Sources/StatsAdapter/StatsAdapterBoundary.swift" \
-        | sort
+    find Sources -type f -name "*.swift" | sort
 )
 
-declare -a CODE_FILES=(
-    "Package.swift"
-)
-
-while IFS= read -r file; do
-    CODE_FILES+=("$file")
-done < <(
-    find Sources Tests -type f -name "*.swift" | sort
-)
+declare -a IMPLEMENTATION_FILES=()
+for file in "${SOURCE_FILES[@]}"; do
+    if [[ "$file" != "Sources/StatsAdapter/StatsAdapterBoundary.swift" ]]; then
+        IMPLEMENTATION_FILES+=("$file")
+    fi
+done
 
 declare -a FORBIDDEN_PATTERNS=(
     "DB.shared"
     "SystemStats"
+    "Remote"
     "MQTT"
     "OAuth"
+    "Updater"
+    "LevelDB"
+    "Widget"
     "LaunchAtLogin"
     "SMC.Helper"
     "UserNotifications"
@@ -46,14 +42,14 @@ declare -a FORBIDDEN_PATTERNS=(
 found_violation=0
 
 for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
-    if rg -n --fixed-strings -- "$pattern" "${SCAN_FILES[@]}"; then
+    if rg -n --fixed-strings -- "$pattern" "${IMPLEMENTATION_FILES[@]}"; then
         found_violation=1
     fi
 done
 
-# Reader 仅扫描 Swift 代码文件，并限定为构造/泛型形态，避免误伤普通文档中的英文单词。
-for pattern in "Reader(" "Reader<"; do
-    if rg -n --fixed-strings -- "$pattern" "${CODE_FILES[@]}"; then
+# 仅扫描真实实现源码中的类型/构造痕迹，避免误伤边界声明和测试 fixture。
+for pattern in "Reader(" "Reader<" "Module("; do
+    if rg -n --fixed-strings -- "$pattern" "${IMPLEMENTATION_FILES[@]}"; then
         found_violation=1
     fi
 done
