@@ -8,12 +8,24 @@ struct MacWatchApp: App {
     private let windowCommandCenter = WindowCommandCenter.shared
 
     init() {
-        if CommandLine.arguments.contains("--probe-temperature-once") {
-            let output = TemperatureProbeDiagnostics.readOnceJSONLines()
-            if output.isEmpty == false {
-                print(output)
+        do {
+            let cliArguments = try MacWatchCLIArguments(arguments: CommandLine.arguments)
+            AcceptanceCoordinator.shared.configure(scenario: cliArguments.acceptanceScenario)
+
+            if cliArguments.shouldProbeTemperatureOnce {
+                let output = TemperatureProbeDiagnostics.readOnceJSONLines()
+                if output.isEmpty == false {
+                    print(output)
+                }
+                exit(0)
             }
-            exit(0)
+
+            if let scenario = cliArguments.acceptanceScenario, scenario.requiresApplicationLaunch == false {
+                let report = AcceptanceImmediateRunner.runSynchronously(scenario)
+                AcceptanceReportWriter.writeAndExit(report)
+            }
+        } catch {
+            AcceptanceReportWriter.writeErrorAndExit(error.localizedDescription)
         }
     }
 

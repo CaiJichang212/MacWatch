@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if shouldStartRuntimeOnLaunch {
             runtime.start()
         }
+        AcceptanceCoordinator.shared.applicationDidFinishLaunching(appDelegate: self)
     }
 
     deinit {
@@ -151,5 +152,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func quitApplication() {
         NSApp.terminate(nil)
+    }
+
+    func showAcceptancePopup() {
+        menuBarController?.showPopoverForAcceptance()
     }
 }
