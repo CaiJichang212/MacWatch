@@ -11,6 +11,7 @@ public final class InMemorySessionHistoryRepository: SessionHistoryRepository {
     private var samplesBySession: [UUID: [TemperatureSample]] = [:]
     private var capabilitiesBySession: [UUID: [TemperatureCapability]] = [:]
     private var timelineEventsBySession: [UUID: [TimelineEvent]] = [:]
+    private let queryService = SessionHistoryQueryService()
 
     public init() {}
 
@@ -93,29 +94,9 @@ public final class InMemorySessionHistoryRepository: SessionHistoryRepository {
     }
 
     public func query(_ query: TemperatureQuery) throws -> [TemperatureSeries] {
-        let filteredSamples = storedSamples(sessionID: query.sessionID)
-            .filter { sample in
-                query.domains.contains(sample.domain) &&
-                (query.metricNames?.contains(sample.metricName) ?? true) &&
-                sample.timestamp >= query.start &&
-                sample.timestamp <= query.end
-            }
-            .sorted { lhs, rhs in
-                if lhs.timestamp == rhs.timestamp {
-                    return lhs.id.uuidString < rhs.id.uuidString
-                }
-                return lhs.timestamp < rhs.timestamp
-            }
-
-        let groupedSamples = Dictionary(
-            grouping: filteredSamples,
-            by: { SeriesKey(metricName: $0.metricName, domain: $0.domain) }
-        )
-
-        let requestedKeys = resolveSeriesKeys(
-            for: query,
-            sampleKeys: Set(groupedSamples.keys)
-        )
+        let samples = storedSamples(sessionID: query.sessionID)
+        let events = timelineEventsBySession[query.sessionID, default: []]
+        let requestedKeys = resolveSeriesKeys(for: query, samples: samples)
 
         return requestedKeys
             .sorted { lhs, rhs in
@@ -125,26 +106,62 @@ public final class InMemorySessionHistoryRepository: SessionHistoryRepository {
                 return lhs.domain.rawValue < rhs.domain.rawValue
             }
             .map { key in
-                let gaps = timelineEventsBySession[query.sessionID, default: []]
-                    .filter { event in
-                        isGapEvent(event) &&
-                        overlaps(query: query, event: event) &&
-                        (event.domain == nil || event.domain == key.domain) &&
-                        (event.metricName == nil || event.metricName == key.metricName)
-                    }
-                    .sorted { $0.startedAt < $1.startedAt }
-                let samples = limitedSamples(
-                    groupedSamples[key, default: []],
-                    maxPoints: query.maxPoints
-                )
-
-                return TemperatureSeries(
-                    metricName: key.metricName,
+                try! queryService.makeSeries(
+                    sessionID: query.sessionID,
                     domain: key.domain,
+                    metricName: key.metricName,
+                    start: query.start,
+                    end: query.end,
+                    maxPoints: query.maxPoints,
                     samples: samples,
-                    gaps: gaps
+                    timelineEvents: events
                 )
             }
+    }
+
+    public func query(
+        sessionID: UUID,
+        domain: TemperatureDomain,
+        metricName: String,
+        range: TemperatureHistoryRange,
+        now: Date,
+        maxPoints: Int
+    ) throws -> TemperatureSeries {
+        guard let session = sessions[sessionID] else {
+            return TemperatureSeries(metricName: metricName, domain: domain, samples: [], gaps: [])
+        }
+
+        return try queryService.makeSeries(
+            session: session,
+            domain: domain,
+            metricName: metricName,
+            range: range,
+            now: now,
+            maxPoints: maxPoints,
+            samples: storedSamples(sessionID: sessionID),
+            timelineEvents: timelineEventsBySession[sessionID, default: []]
+        )
+    }
+
+    public func clearCurrentSessionHistory(at clearedAt: Date) throws {
+        guard let currentSessionID else {
+            return
+        }
+        samplesBySession[currentSessionID] = []
+        capabilitiesBySession[currentSessionID] = []
+        timelineEventsBySession[currentSessionID] = [
+            TimelineEvent(
+                id: UUID(),
+                sessionID: currentSessionID,
+                eventType: .historyCleared,
+                startedAt: clearedAt,
+                endedAt: clearedAt,
+                domain: nil,
+                metricName: nil,
+                reasonCode: "historyCleared",
+                message: "history cleared"
+            )
+        ]
     }
 
     public func samples(sessionID: UUID) throws -> [TemperatureSample] {
@@ -159,16 +176,11 @@ public final class InMemorySessionHistoryRepository: SessionHistoryRepository {
         samplesBySession[sessionID, default: []]
     }
 
-    private func overlaps(query: TemperatureQuery, event: TimelineEvent) -> Bool {
-        let eventEnd = event.endedAt ?? event.startedAt
-        return event.startedAt <= query.end && eventEnd >= query.start
-    }
-
     private func resolveSeriesKeys(
         for query: TemperatureQuery,
-        sampleKeys: Set<SeriesKey>
+        samples: [TemperatureSample]
     ) -> Set<SeriesKey> {
-        var keys = sampleKeys
+        var keys = Set(samples.map { SeriesKey(metricName: $0.metricName, domain: $0.domain) })
 
         if let metricNames = query.metricNames, metricNames.isEmpty == false {
             for metricName in metricNames {
@@ -215,33 +227,6 @@ public final class InMemorySessionHistoryRepository: SessionHistoryRepository {
             return "system.temperature.hottest"
         case .sensor:
             return "sensor.temperature.raw"
-        }
-    }
-
-    private func limitedSamples(
-        _ samples: [TemperatureSample],
-        maxPoints: Int
-    ) -> [TemperatureSample] {
-        guard samples.count > maxPoints else {
-            return samples
-        }
-
-        return Array(samples.suffix(maxPoints))
-    }
-
-    private func isGapEvent(_ event: TimelineEvent) -> Bool {
-        switch event.eventType {
-        case .systemSleepStarted,
-             .probeReadFailed,
-             .probeUnsupported,
-             .probeStale,
-             .historyWriteFailed:
-            return true
-        case .appStarted,
-             .appTerminating,
-             .systemSleepEnded,
-             .historyCleared:
-            return false
         }
     }
 }

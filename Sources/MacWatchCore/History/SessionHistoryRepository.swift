@@ -10,4 +10,13 @@ public protocol SessionHistoryRepository: AnyObject {
     func updateTimelineEvent(id: UUID, endedAt: Date) throws
     func timelineEvents(sessionID: UUID) throws -> [TimelineEvent]
     func query(_ query: TemperatureQuery) throws -> [TemperatureSeries]
+    func query(
+        sessionID: UUID,
+        domain: TemperatureDomain,
+        metricName: String,
+        range: TemperatureHistoryRange,
+        now: Date,
+        maxPoints: Int
+    ) throws -> TemperatureSeries
+    func clearCurrentSessionHistory(at clearedAt: Date) throws
 }
