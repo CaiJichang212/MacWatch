@@ -226,7 +226,7 @@ public final class InMemorySessionHistoryRepository: SessionHistoryRepository {
         case .system:
             return "system.temperature.hottest"
         case .sensor:
-            return "sensor.temperature.raw"
+            return TemperatureMetricName.sensorTemperatureRaw
         }
     }
 }

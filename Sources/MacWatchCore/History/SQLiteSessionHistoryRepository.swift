@@ -170,7 +170,7 @@ public final class SQLiteSessionHistoryRepository: SessionHistoryRepository {
         case .system:
             return TemperatureMetricName.systemHottest
         case .sensor:
-            return "sensor.temperature.raw"
+            return TemperatureMetricName.sensorTemperatureRaw
         }
     }
 }
