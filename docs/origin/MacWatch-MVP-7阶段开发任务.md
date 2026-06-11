@@ -1,6 +1,6 @@
 建议把 MacWatch MVP 拆成 **7 个开发阶段**。当前仓库里 `Sources/MacWatchApp`、`Sources/MacWatchCore`、`Sources/StatsAdapter` 还是空目录，所以应从工程骨架和温度主链路开始，而不是先迁移大量 Stats 代码。
 
-推荐顺序是：**先做 CPU 温度端到端纵切，再扩展 GPU/内存/SSD/电池**。也就是先让“采集 CPU → 实时状态 → 会话历史 → 菜单栏/详情趋势”完整跑通，再横向补齐其他温度域。这样风险最低，因为 MVP 的硬验收核心是 MacBook Air M4 上必须读到有效 CPU 温度。
+推荐顺序是：**先做 CPU 温度端到端纵切，再扩展 GPU/SSD/电池/系统传感器**。也就是先让“采集 CPU → 实时状态 → 会话历史 → 菜单栏/详情趋势”完整跑通，再横向补齐其他温度域。CPU/GPU 口径以 Stats Sensors 的 Hottest/Average 为准，`PMU tdie*` / `PMU2 tdie*` 不归入 CPU。
 
 **阶段 1：工程骨架与边界确认**
 
@@ -20,7 +20,7 @@
 
 任务：
 
-- 定义 `TemperatureDomain`：`cpu`、`gpu`、`memory`、`ssd`、`battery`、`system`、`sensor`。
+- 定义 `TemperatureDomain`：`cpu`、`gpu`、`ssd`、`battery`、`system`、`sensor`。
 - 定义 `TemperatureSource`：`HID Sensors`、`SMC`、`Battery IORegistry`、`NVMe SMART`、`IOReport Candidate`。
 - 定义 `TemperatureQuality`：`valid`、`unsupported`、`readFailed`、`stale`。
 - 定义 `TemperatureSample`、`TemperatureCapability`、`TemperatureQuery`、`TemperatureSeries`。
@@ -44,7 +44,7 @@
   - `Vendor/Stats/Kit/plugins/SystemKit.swift`
 - 实现 `TemperatureProbe` 协议。
 - 实现 CPU 温度 probe，作为第一条端到端验收链路。
-- 实现 GPU、内存、SSD/NAND、电池温度 probe 的能力检测和读取尝试。
+- 实现 GPU、SSD/NAND、电池和系统传感器温度 probe 的能力检测和读取尝试。
 - 对不可读指标输出 `unsupported` 或 `readFailed`，不能静默隐藏。
 - 保留原始 sensor key、SMC key、IORegistry property 或 SMART 标识。
 - 明确禁止接入 Stats Remote、SystemStats、LevelDB、Updater、通知、风扇控制 helper。
@@ -59,7 +59,7 @@
 - 实现 `TemperatureScheduler`，为不同 probe 管理独立刷新间隔。
 - 实现默认采样策略：
   - CPU/GPU 实时 5 秒，历史 10 秒。
-  - 内存/SSD/电池实时 30 秒，历史 60 秒。
+  - SSD/电池实时 30 秒，历史 60 秒。
   - 系统传感器实时 10 秒，历史 30 秒。
 - 实现 `SampleBus`，把采样结果分发给实时状态和历史写入。
 - 实现 `LiveTemperatureStore`，维护当前最高温、各指标状态、更新时间、stale 判断。
@@ -88,11 +88,11 @@
 
 - 菜单栏：
   - 默认显示当前最高温，例如 `72°C`。
-  - 支持显示最高温、CPU、GPU、内存、磁盘、电池。
+  - 支持显示最高温、CPU、GPU、磁盘、电池。
   - 支持摄氏度/华氏度。
   - stale 状态弱化显示。
 - Popup：
-  - 显示最高温、CPU、GPU、内存、SSD/NAND、电池、系统温度。
+  - 显示最高温、CPU、GPU、SSD/NAND、电池、系统温度。
   - 每项显示状态、来源、更新时间。
   - 提供打开 Dashboard 和兼容性信息入口。
 - Dashboard：
@@ -118,8 +118,8 @@
 
 任务：
 
-- 在 MacBook Air M4 上验证至少一个 CPU 温度为 `valid`。
-- 验证 CPU、GPU、内存、SSD/NAND、电池五类硬件都有状态展示。
+- 在 MacBook Air M4 上验证 CPU/GPU 只使用 Stats 认可传感器；支持时输出 Hottest/Average，当前设备不暴露对应传感器时输出 `readFailed`。
+- 验证 CPU、GPU、SSD/NAND、电池和系统/传感器温度都有状态展示。
 - 验证不可读指标显示 `unsupported` 或 `readFailed`，不显示 `0°C`、空白或伪造值。
 - 验证菜单栏、Popup、Dashboard 打开不阻塞主线程。
 - 验证 Dashboard 首屏小于 1 秒，趋势查询小于 1 秒。

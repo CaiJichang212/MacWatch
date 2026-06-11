@@ -78,7 +78,7 @@ MacWatch 的架构采用分层演进策略：MVP 只实现 Apple Silicon MacBook
 
 MVP 只解决以下问题：
 
-1. 在 MacBook Air M 系列设备上采集 CPU、GPU、内存、内置 SSD/NAND、电池中可读取的温度。
+1. 在 MacBook Air M 系列设备上采集 CPU、GPU、内置 SSD/NAND、电池、系统/传感器中可读取的温度。
 2. 对不可读取的温度指标明确展示 `unsupported` 或 `readFailed`，不能隐藏或显示伪造值。
 3. 在菜单栏、Popup、Dashboard 和详情页展示当前温度、数据来源、更新时间和状态。
 4. 记录本次 App 运行会话内的温度历史，并支持趋势查询。
@@ -204,7 +204,6 @@ flowchart TB
     subgraph Probes[温度采集层]
         CPUProbe[CPU Temperature Probe]
         GPUProbe[GPU Temperature Probe]
-        MemoryProbe[Memory Temperature Probe]
         SSDProbe[SSD/NAND Temperature Probe]
         BatteryProbe[Battery Temperature Probe]
         SystemProbe[System Sensor Probe]
@@ -247,13 +246,12 @@ UI 不直接访问 SQLite 或系统 API。趋势图通过 `SessionHistoryStore` 
 
 ### 5.1 温度领域
 
-MVP 使用固定温度领域，确保 UI、能力检测、历史记录和趋势查询都覆盖需求中的五类硬件。
+MVP 使用固定温度领域，确保 UI、能力检测、历史记录和趋势查询都覆盖温度主链路。
 
 ```swift
 enum TemperatureDomain: String, Codable, CaseIterable {
     case cpu
     case gpu
-    case memory
     case ssd
     case battery
     case system
@@ -265,9 +263,8 @@ enum TemperatureDomain: String, Codable, CaseIterable {
 
 | Domain | MVP 要求 |
 | --- | --- |
-| `cpu` | MacBook Air M4 验收机必须读到至少一个有效 CPU 温度 |
-| `gpu` | 支持时展示，不支持时显示原因 |
-| `memory` | 支持内存或 Memory Proximity 温度时展示 |
+| `cpu` | 按 Stats Sensors 认可的 CPU 传感器展示最高温度和平均温度，无法读取时显示原因 |
+| `gpu` | 按 Stats Sensors 认可的 GPU 传感器展示最高温度和平均温度，无法读取时显示原因 |
 | `ssd` | 只覆盖内置 SSD/NAND，外接磁盘不进入 MVP |
 | `battery` | 使用电池相关系统信息，支持时展示 |
 | `system` | SOC、环境、机身或其他系统温度 |
@@ -290,7 +287,7 @@ MVP 来源优先级：
 
 | 优先级 | 来源 | 用途 | 规则 |
 | --- | --- | --- | --- |
-| 1 | HID Sensors | Apple Silicon 温度传感器 | 优先用于 CPU、GPU、SOC、内存等可读温度 |
+| 1 | HID Sensors | Apple Silicon 温度传感器 | 优先用于 CPU、GPU、SOC 等可读温度；CPU/GPU 归类必须对齐 Stats Sensors |
 | 2 | SMC | 温度 key fallback | 只读，不能写入或控制风扇 |
 | 3 | Battery IORegistry | 电池温度 | 电池温度优先来源 |
 | 4 | NVMe SMART | 内置 SSD/NAND 温度 | 支持时读取，不强制要求 |
@@ -361,7 +358,7 @@ struct TemperatureSample: Codable, Identifiable, Hashable {
 
 - 内部统一保存摄氏度，UI 根据设置转换华氏度。
 - `valueCelsius` 仅在 `quality == valid` 时有值。
-- `metricName` 必须稳定，例如 `cpu.temperature.hottest`、`gpu.temperature.hottest`、`memory.temperature.proximity`、`ssd.temperature.internal`、`battery.temperature`。
+- `metricName` 必须稳定，例如 `cpu.temperature.hottest`、`cpu.temperature.average`、`gpu.temperature.hottest`、`gpu.temperature.average`、`ssd.temperature.internal`、`battery.temperature`。
 - 原始 sensor key 放入 `rawKey` 或 `attributes`，不拼入稳定指标名。
 - 不支持和读取失败可以生成状态记录，但不参与最高温度计算。
 
@@ -458,7 +455,7 @@ MVP 趋势图不应直接渲染超过约 2,000 个点。超过时按展示宽度
 | 页面 | 责任 |
 | --- | --- |
 | 菜单栏 | 显示当前最高温度或用户选择的单项温度，数据过期时弱化 |
-| Popup | 显示 CPU、GPU、内存、SSD、电池、系统温度概览和状态 |
+| Popup | 显示 CPU、GPU、SSD、电池、系统温度概览和状态 |
 | Dashboard | 显示当前最高温度、温度卡片、最近趋势摘要、不可用说明 |
 | 详情页 | 显示单指标趋势、最大/最小/平均、峰值时间、来源和采样状态 |
 | 设置 | 温度单位、刷新间隔、趋势范围、菜单栏显示项、兼容性状态、清除会话历史 |
@@ -579,7 +576,6 @@ ON timeline_event(session_id, started_at_ms, ended_at_ms);
 | --- | --- | --- | --- |
 | CPU 温度 | 5 秒 | 10 秒 | MVP 验收核心 |
 | GPU 温度 | 5 秒 | 10 秒 | 支持时展示 |
-| 内存温度 | 30 秒 | 60 秒 | 高成本或不可读时降级 |
 | 内置 SSD/NAND 温度 | 30 秒 | 60 秒 | SMART 不应高频读取 |
 | 电池温度 | 30 秒 | 60 秒 | 可由电源事件触发额外读取 |
 | 系统温度传感器 | 10 秒 | 30 秒 | 仅对可识别或用户关注项写历史 |
@@ -864,7 +860,7 @@ MacWatch/
 
 - MVP 不承诺 CPU 使用率、内存压力、磁盘 I/O、电池功耗等资源监控。
 - MVP 不承诺告警、导出、远程、Widget、风扇控制。
-- CPU、GPU、内存、SSD、电池温度都有状态展示和不可用说明路径。
+- CPU、GPU、SSD、电池、系统/传感器温度都有状态展示和不可用说明路径。
 - `estimated` 不作为 MVP 有效状态。
 
 ### 16.2 Stats 复用边界验收
@@ -876,8 +872,8 @@ MacWatch/
 ### 16.3 MVP 功能验收
 
 - App 能检测当前设备是否为 MacBook Air M 系列。
-- MacBook Air M4 上至少一个 CPU 温度指标为 `valid`。
-- GPU、内存、SSD、电池不可读取时显示 `unsupported` 或 `readFailed`。
+- CPU/GPU 使用 Stats Sensors 认可的传感器归类；支持时输出最高温和平均温，不支持时显示 `unsupported` 或 `readFailed`。
+- GPU、SSD、电池不可读取时显示 `unsupported` 或 `readFailed`。
 - 不支持的指标不参与最高温度计算。
 - 当前会话历史查询小于 1 秒。
 - 趋势图能显示数据缺口。
@@ -896,9 +892,8 @@ MacWatch/
 | 风险 | 影响 | 应对 |
 | --- | --- | --- |
 | Apple Silicon sensor key 不稳定 | 指标归类困难 | 保存 raw key，使用稳定 metricName 和能力说明 |
-| HID Sensors 不可读 | CPU/GPU/内存温度缺失 | SMC fallback；不可读时显示明确状态 |
+| HID Sensors 不可读 | CPU/GPU 温度缺失 | SMC fallback；不可读时显示明确状态 |
 | CPU 温度只能读到部分传感器 | 最高/平均语义不稳定 | 记录来源和 raw key；UI 展示“CPU 相关温度”说明 |
-| 内存温度不可读 | MVP 五类硬件中一类无有效值 | 显示 `unsupported`，不隐藏卡片和兼容性说明 |
 | SSD SMART 受限制 | 内置 SSD 温度缺失 | 降级为 `unsupported/readFailed`，不强制授权 |
 | Stats Reader 被误用 | 引入 DB/联网副作用 | Adapter 只复用纯读取逻辑；代码评审禁止实例化 Reader |
 | 高频采样增加能耗 | 影响续航 | Probe 成本分级，SMART 和传感器枚举降频 |

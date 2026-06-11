@@ -1,6 +1,6 @@
 # MacWatch
 
-MacWatch 是一个面向 Apple Silicon MacBook Air 的本机温度监控工具。当前 MVP 聚焦温度主链路：采集 CPU、GPU、内存、内置 SSD/NAND、电池以及系统/传感器温度中可读取的指标，展示实时状态，记录本次运行会话历史，并提供趋势查看。
+MacWatch 是一个面向 Apple Silicon MacBook Air 的本机温度监控工具。当前 MVP 聚焦温度主链路：采集 CPU、GPU、内置 SSD/NAND、电池以及系统/传感器温度中可读取的指标，展示实时状态，记录本次运行会话历史，并提供趋势查看。
 
 项目默认本地运行，不联网、不上传，不记录用户文件名、网络内容、窗口标题或进程列表。Stats 只作为只读上游参考，MacWatch 通过自己的 `StatsAdapter` 隔离必要的只读采集逻辑。
 
@@ -11,7 +11,7 @@ MacWatch 是一个面向 Apple Silicon MacBook Air 的本机温度监控工具�
 - Swift Package 工程，目标平台为 macOS 13 及以上。
 - `MacWatchApp`：SwiftUI App、菜单栏入口、Popup、Dashboard、兼容性页、温度详情页、设置页、首次启动引导和验收 CLI。
 - `MacWatchCore`：温度领域模型、能力检测、采样调度、实时状态、设置、本次运行会话历史、SQLite 存储、趋势查询和降采样。
-- `StatsAdapter`：CPU、GPU、内存、SSD/NAND、电池、系统温度和传感器温度 probe；只读 HID、SMC、IORegistry、NVMe SMART 等适配代码。
+- `StatsAdapter`：CPU、GPU、SSD/NAND、电池、系统温度和传感器温度 probe；只读 HID、SMC、IORegistry、NVMe SMART 等适配代码。
 - `StatsAdapterIOHID`：最小 Objective-C HID 只读桥接 target。
 - `Tests`：Core、App、StatsAdapter 单元测试，以及 Stats 边界和阶段 7 验收脚本相关测试。
 - `scripts/run_stage7_acceptance.sh`：阶段 7 验收入口，覆盖 probe 状态、Dashboard/Popup、首次启动、趋势查询、睡眠唤醒模拟、资源、网络、Stats 边界和分发预检。

@@ -29,7 +29,7 @@ MacWatch MVP 是本机温度监控工具，核心是 Apple Silicon MacBook Air �
 
 MVP 不应擅自混入 Post-MVP 能力，包括但不限于：资源监控、进程统计、告警、导出、云同步、远程监控、Widget、风扇控制、长期跨会话历史。
 
-优先用纵切方式推进：先打通 CPU 温度端到端链路，再横向补齐 GPU、内存、SSD/NAND、电池等温度状态。
+优先用纵切方式推进：先打通 CPU 温度端到端链路，再横向补齐 GPU、SSD/NAND、电池、系统/传感器等温度状态。
 
 ## 目录职责
 
@@ -75,7 +75,7 @@ MVP 不应擅自混入 Post-MVP 能力，包括但不限于：资源监控、进
 
 - `MacWatchApp` executable：SwiftUI App、`AppDelegate`、菜单栏、窗口、Popup、Dashboard、兼容性页、详情页、设置页、首次启动引导和验收 CLI。
 - `MacWatchCore` library：温度领域模型、`SampleBus`、`LiveTemperatureStore`、`TemperatureScheduler`、能力检测、设置、SQLite 会话历史和趋势查询。
-- `StatsAdapter` library：CPU、GPU、内存、SSD/NAND、电池、系统温度和传感器温度 probe；只允许承载只读采集适配。
+- `StatsAdapter` library：CPU、GPU、SSD/NAND、电池、系统温度和传感器温度 probe；只允许承载只读采集适配。
 - `StatsAdapterIOHID` target：最小 HID 只读桥接。
 
 当前实现已包含阶段 7 验收相关入口：`--probe-temperature-once`、`--acceptance-run <scenario>` 和 `scripts/run_stage7_acceptance.sh`。阶段 7 涉及真实硬件、资源、网络和分发预检；缺少 Developer ID 或公证配置时，分发预检可以是 `blocked`，不要把它误判为温度链路失败。
