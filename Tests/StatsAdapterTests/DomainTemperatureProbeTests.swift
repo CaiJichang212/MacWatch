@@ -204,6 +204,23 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(samples.first?.attributes["sourceSet"], "HID Sensors,SMC")
     }
 
+    func testSensorProbeKeepsSourceFromHottestReading() async {
+        let probe = SensorTemperatureProbe(
+            snapshotProvider: FakeStatsSnapshotProvider(snapshot: makeSnapshot([
+                ("PMU2 tcal", 52.0, .hidSensors, .sensor, false),
+                ("TA0P", 60.0, .smc, .sensor, false),
+            ]))
+        )
+
+        let samples = await probe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 88))
+
+        XCTAssertEqual(samples.count, 1)
+        XCTAssertEqual(samples.first?.quality, .valid)
+        XCTAssertEqual(samples.first?.source, .smc)
+        XCTAssertEqual(samples.first?.rawKey, "TA0P")
+        XCTAssertEqual(samples.first?.valueCelsius, 60.0)
+    }
+
     func testProbesReturnStatusSamplesWhenSourceIsUnavailable() async {
         let batteryProbe = BatteryTemperatureProbe(
             batteryReader: FakeBatteryReader(reading: nil),

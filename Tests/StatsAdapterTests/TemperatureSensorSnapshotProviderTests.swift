@@ -75,7 +75,6 @@ final class TemperatureSensorSnapshotProviderTests: XCTestCase {
         XCTAssertEqual(snapshot.readings.filter { $0.domain == .sensor }.map(\.rawKey).sorted(), [
             "PMU2 tcal",
             "SOC MTR Temp Sensor0",
-            "TZZZ",
             "mystery thermal",
         ])
         XCTAssertTrue(snapshot.readings.first { $0.rawKey == "pACC MTR Temp Sensor0" }?.averageCandidate == true)
