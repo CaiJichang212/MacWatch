@@ -88,20 +88,22 @@ public final class SMCReadOnlyClient: SMCValueReading, @unchecked Sendable {
             return nil
         }
 
-        input.keyInfo.dataSize = output.keyInfo.dataSize
+        let dataSize = output.keyInfo.dataSize
+        let dataType = output.keyInfo.dataType
+        input.keyInfo.dataSize = dataSize
         input.data8 = SMCCommand.readBytes.rawValue
         guard performCall(command: .kernelIndex, input: &input, output: &output) == kIOReturnSuccess else {
             return nil
         }
 
         let rawBytes = withUnsafeBytes(of: output.bytes) { buffer in
-            Array(buffer.prefix(Int(output.keyInfo.dataSize)))
+            Array(buffer.prefix(Int(dataSize)))
         }
 
         return SMCValue(
             key: key,
-            dataSize: UInt32(output.keyInfo.dataSize),
-            dataType: output.keyInfo.dataType.toString(),
+            dataSize: UInt32(dataSize),
+            dataType: dataType.toString(),
             bytes: rawBytes
         )
     }
