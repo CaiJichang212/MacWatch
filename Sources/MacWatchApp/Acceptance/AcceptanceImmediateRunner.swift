@@ -53,12 +53,50 @@ enum AcceptanceImmediateRunner {
         ]
 
         var metrics: [String: String] = [:]
+        let validation = validateProbeStatusRecords(records, requiredDomains: requiredDomains)
+        metrics.merge(validation.metrics) { _, new in new }
+        let failures = validation.failures
+
+        let durationMs = Date().timeIntervalSince(startedAt) * 1_000
+        return AcceptanceReport(
+            scenario: .probeStatus,
+            passed: failures.isEmpty,
+            startedAt: startedAt,
+            durationMs: durationMs,
+            metrics: metrics,
+            failures: failures
+        )
+    }
+
+    struct ProbeStatusValidationResult {
+        let metrics: [String: String]
+        let failures: [String]
+    }
+
+    static func validateProbeStatusRecords(
+        _ records: [TemperatureProbeDiagnosticRecord],
+        requiredDomains: [String] = [
+            TemperatureDomain.cpu.rawValue,
+            TemperatureDomain.gpu.rawValue,
+            TemperatureDomain.ssd.rawValue,
+            TemperatureDomain.battery.rawValue,
+            TemperatureDomain.system.rawValue,
+            TemperatureDomain.sensor.rawValue,
+        ]
+    ) -> ProbeStatusValidationResult {
+        var metrics: [String: String] = [:]
         var failures: [String] = []
 
         let recordsByDomain = Dictionary(grouping: records, by: \.domain)
         let cpuHasValid = recordsByDomain[TemperatureDomain.cpu.rawValue, default: []]
             .contains { $0.quality == TemperatureQuality.valid.rawValue }
         metrics["cpu.hasValidSample"] = cpuHasValid ? "true" : "false"
+
+        let hasMemoryRecord = records.contains { $0.domain == "memory" }
+        metrics["memory.absent"] = hasMemoryRecord ? "false" : "true"
+        if hasMemoryRecord {
+            failures.append("memory.unexpectedDomain")
+        }
 
         for domain in requiredDomains {
             guard let domainRecords = recordsByDomain[domain], domainRecords.isEmpty == false else {
@@ -85,15 +123,68 @@ enum AcceptanceImmediateRunner {
             }
         }
 
-        let durationMs = Date().timeIntervalSince(startedAt) * 1_000
-        return AcceptanceReport(
-            scenario: .probeStatus,
-            passed: failures.isEmpty,
-            startedAt: startedAt,
-            durationMs: durationMs,
-            metrics: metrics,
-            failures: failures
+        validateCPUAndGPURecords(recordsByDomain: recordsByDomain, metrics: &metrics, failures: &failures)
+
+        return ProbeStatusValidationResult(metrics: metrics, failures: failures)
+    }
+
+    private static func validateCPUAndGPURecords(
+        recordsByDomain: [String: [TemperatureProbeDiagnosticRecord]],
+        metrics: inout [String: String],
+        failures: inout [String]
+    ) {
+        validatePrimaryTemperatureRecords(
+            domain: TemperatureDomain.cpu.rawValue,
+            hottestMetricName: TemperatureMetricName.cpuHottest,
+            averageMetricName: TemperatureMetricName.cpuAverage,
+            deniedRawKeyPrefixes: ["PMU ", "PMU2 ", "SOC", "PMGR"],
+            recordsByDomain: recordsByDomain,
+            metrics: &metrics,
+            failures: &failures
         )
+        validatePrimaryTemperatureRecords(
+            domain: TemperatureDomain.gpu.rawValue,
+            hottestMetricName: TemperatureMetricName.gpuHottest,
+            averageMetricName: TemperatureMetricName.gpuAverage,
+            deniedRawKeyPrefixes: [],
+            recordsByDomain: recordsByDomain,
+            metrics: &metrics,
+            failures: &failures
+        )
+    }
+
+    private static func validatePrimaryTemperatureRecords(
+        domain: String,
+        hottestMetricName: String,
+        averageMetricName: String,
+        deniedRawKeyPrefixes: [String],
+        recordsByDomain: [String: [TemperatureProbeDiagnosticRecord]],
+        metrics: inout [String: String],
+        failures: inout [String]
+    ) {
+        let domainRecords = recordsByDomain[domain, default: []]
+        let validHottestRecords = domainRecords.filter {
+            $0.metricName == hottestMetricName && $0.quality == TemperatureQuality.valid.rawValue
+        }
+
+        let deniedRawKeys = validHottestRecords.compactMap(\.rawKey).filter { rawKey in
+            deniedRawKeyPrefixes.contains { rawKey.hasPrefix($0) }
+        }
+        metrics["\(domain).rawKeyBoundary"] = deniedRawKeys.isEmpty ? "passed" : "failed"
+        failures.append(contentsOf: deniedRawKeys.map { "\(domain).deniedRawKey.\($0)" })
+
+        guard validHottestRecords.isEmpty == false else {
+            metrics["\(domain).averagePresentForValidHottest"] = "notApplicable"
+            return
+        }
+
+        let hasValidAverage = domainRecords.contains {
+            $0.metricName == averageMetricName && $0.quality == TemperatureQuality.valid.rawValue
+        }
+        metrics["\(domain).averagePresentForValidHottest"] = hasValidAverage ? "true" : "false"
+        if hasValidAverage == false {
+            failures.append("\(domain).averageMissingForValidHottest")
+        }
     }
 
     private static func runTrendQuerySynchronously() -> AcceptanceReport {

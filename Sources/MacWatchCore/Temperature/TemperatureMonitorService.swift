@@ -76,7 +76,10 @@ public final class TemperatureMonitorService {
         }
 
         let samplesByMetricName = Dictionary(
-            uniqueKeysWithValues: collectedSamples.map { ($0.metricName, $0) }
+            collectedSamples.map { ($0.metricName, $0) },
+            uniquingKeysWith: { current, next in
+                next.timestamp >= current.timestamp ? next : current
+            }
         )
 
         return LiveTemperatureState(
