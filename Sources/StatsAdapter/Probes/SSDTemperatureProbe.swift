@@ -26,15 +26,16 @@ public struct SSDTemperatureProbe: TemperatureProbe {
 
     public func detect(sessionID: UUID, at timestamp: Date) async -> TemperatureCapability {
         let sample = await read(sessionID: sessionID, at: timestamp).first
+        let isReadable = sample?.quality == .valid
         return TemperatureCapability(
             id: UUID(),
             sessionID: sessionID,
             domain: .ssd,
             source: sample?.source ?? .nvmeSMART,
             supported: true,
-            readable: sample?.quality == .valid,
-            reasonCode: sample?.quality == .valid ? "ok" : "readFailed",
-            reasonMessage: sample?.quality.rawValue ?? "readFailed",
+            readable: isReadable,
+            reasonCode: isReadable ? "ok" : sample?.errorCode ?? "noReadableTemperature",
+            reasonMessage: isReadable ? "ok" : "No readable internal SSD temperature from NVMe SMART, HID Sensors, or SMC.",
             rawKey: sample?.rawKey,
             detectedAt: timestamp,
             updatedAt: timestamp
@@ -112,7 +113,7 @@ public struct SSDTemperatureProbe: TemperatureProbe {
                 displayName: "Internal SSD",
                 quality: .readFailed,
                 source: .nvmeSMART,
-                errorCode: "temperatureUnavailable",
+                errorCode: "noReadableTemperature",
                 attributes: [
                     "attemptedRawKeys": catalog.smcSSDKeys().joined(separator: ","),
                     "readerError": "temperatureUnavailable",

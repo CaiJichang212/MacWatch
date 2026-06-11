@@ -1,36 +1,50 @@
 import MacWatchCore
 
 public struct StatsTemperatureProbeFactory {
-    public init() {}
+    private let temperatureSensorSnapshotProvider: TemperatureSensorSnapshotProvider
+
+    public init(
+        temperatureSensorSnapshotProvider: TemperatureSensorSnapshotProvider = TemperatureSensorSnapshotProvider()
+    ) {
+        self.temperatureSensorSnapshotProvider = temperatureSensorSnapshotProvider
+    }
 
     public func makeCPUOnlyProbes() -> [any TemperatureProbe] {
-        [CPUTemperatureProbe()]
+        [CPUTemperatureProbe(hidReader: temperatureSensorSnapshotProvider)]
     }
 
     public func makeFastProbes() -> [any TemperatureProbe] {
         [
-            CPUTemperatureProbe(),
-            GPUTemperatureProbe(),
+            CPUTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
+            GPUTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
         ]
     }
 
     public func makeSlowProbes() -> [any TemperatureProbe] {
         [
             MemoryTemperatureProbe(),
-            SSDTemperatureProbe(),
-            BatteryTemperatureProbe(),
+            SSDTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
+            BatteryTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
         ]
     }
 
     public func makeSystemProbes() -> [any TemperatureProbe] {
-        []
+        [
+            SystemTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
+        ]
     }
 
     public func makeSensorProbes() -> [any TemperatureProbe] {
-        []
+        [
+            SensorTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
+        ]
     }
 
     public func makeDefaultProbes() -> [any TemperatureProbe] {
         makeFastProbes() + makeSlowProbes() + makeSystemProbes() + makeSensorProbes()
+    }
+
+    public func invalidateTemperatureSnapshots() {
+        temperatureSensorSnapshotProvider.invalidateSnapshot()
     }
 }

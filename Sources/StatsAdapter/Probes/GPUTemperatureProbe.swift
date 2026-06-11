@@ -84,23 +84,11 @@ public struct GPUTemperatureProbe: TemperatureProbe {
             ]
         }
 
-        if let ioReading = ioAcceleratorReader.readTemperature(), isValid(ioReading.valueCelsius) {
-            return [
-                try! TemperatureSample.makeValid(
-                    sessionID: sessionID,
-                    timestamp: timestamp,
-                    metricName: TemperatureMetricName.gpuHottest,
-                    domain: .gpu,
-                    deviceID: "gpu-die",
-                    displayName: "GPU Hottest",
-                    valueCelsius: ioReading.valueCelsius,
-                    source: .ioReportCandidate,
-                    attributes: ["statisticsField": ioReading.statisticsField]
-                )
-            ]
-        }
-
-        return [unavailableSample(sessionID: sessionID, timestamp: timestamp)]
+        return [unavailableSample(
+            sessionID: sessionID,
+            timestamp: timestamp,
+            ioAcceleratorCandidate: ioAcceleratorReader.readTemperature()
+        )]
     }
 
     private func isValid(_ value: Double) -> Bool {
@@ -108,15 +96,16 @@ public struct GPUTemperatureProbe: TemperatureProbe {
     }
 
     private func capability(from sample: TemperatureSample, sessionID: UUID, timestamp: Date) -> TemperatureCapability {
-        TemperatureCapability(
+        let isReadable = sample.quality == .valid
+        return TemperatureCapability(
             id: UUID(),
             sessionID: sessionID,
             domain: .gpu,
             source: sample.source,
             supported: true,
-            readable: sample.quality == .valid,
-            reasonCode: sample.quality == .valid ? "ok" : "readFailed",
-            reasonMessage: sample.quality.rawValue,
+            readable: isReadable,
+            reasonCode: isReadable ? "ok" : sample.errorCode ?? "readFailed",
+            reasonMessage: isReadable ? "ok" : "No readable GPU temperature from HID Sensors or SMC.",
             rawKey: sample.rawKey,
             detectedAt: timestamp,
             updatedAt: timestamp
@@ -139,8 +128,22 @@ public struct GPUTemperatureProbe: TemperatureProbe {
         )
     }
 
-    private func unavailableSample(sessionID: UUID, timestamp: Date) -> TemperatureSample {
+    private func unavailableSample(
+        sessionID: UUID,
+        timestamp: Date,
+        ioAcceleratorCandidate: IOAcceleratorTemperatureReading?
+    ) -> TemperatureSample {
         let platform = platformDetector.detect() ?? .intel
+        var attributes = [
+            "attemptedRawKeys": catalog.smcGPUKeys(for: platform).joined(separator: ","),
+            "readerError": "temperatureUnavailable",
+            "sourcePriority": "\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)",
+        ]
+
+        if let ioAcceleratorCandidate {
+            attributes["candidateSourceDisabled"] = "IOAccelerator \(ioAcceleratorCandidate.statisticsField)"
+        }
+
         return try! TemperatureSample.makeInvalid(
             sessionID: sessionID,
             timestamp: timestamp,
@@ -150,13 +153,8 @@ public struct GPUTemperatureProbe: TemperatureProbe {
             displayName: "GPU Hottest",
             quality: .readFailed,
             source: .smc,
-            errorCode: "temperatureUnavailable",
-            attributes: [
-                "attemptedRawKeys": catalog.smcGPUKeys(for: platform).joined(separator: ","),
-                "readerError": "temperatureUnavailable",
-                "sourcePriority": "\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue),\(TemperatureSource.ioReportCandidate.rawValue)",
-                "statisticsField": "Temperature(C)",
-            ]
+            errorCode: "noReadableTemperature",
+            attributes: attributes
         )
     }
 }

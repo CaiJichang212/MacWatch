@@ -26,15 +26,16 @@ public struct BatteryTemperatureProbe: TemperatureProbe {
 
     public func detect(sessionID: UUID, at timestamp: Date) async -> TemperatureCapability {
         let sample = await read(sessionID: sessionID, at: timestamp).first
+        let isReadable = sample?.quality == .valid
         return TemperatureCapability(
             id: UUID(),
             sessionID: sessionID,
             domain: .battery,
             source: sample?.source ?? .batteryIORegistry,
             supported: true,
-            readable: sample?.quality == .valid,
-            reasonCode: sample?.quality == .valid ? "ok" : "readFailed",
-            reasonMessage: sample?.quality.rawValue ?? "readFailed",
+            readable: isReadable,
+            reasonCode: isReadable ? "ok" : sample?.errorCode ?? "noReadableTemperature",
+            reasonMessage: isReadable ? "ok" : "No readable battery temperature from Battery IORegistry, HID Sensors, or SMC.",
             rawKey: sample?.rawKey,
             detectedAt: timestamp,
             updatedAt: timestamp
@@ -108,7 +109,7 @@ public struct BatteryTemperatureProbe: TemperatureProbe {
                 displayName: "Battery",
                 quality: .readFailed,
                 source: .batteryIORegistry,
-                errorCode: "temperatureUnavailable",
+                errorCode: "noReadableTemperature",
                 attributes: [
                     "attemptedRawKeys": catalog.smcBatteryKeys().joined(separator: ","),
                     "ioRegistryProperty": "Temperature",
