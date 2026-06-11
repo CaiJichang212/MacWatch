@@ -8,4 +8,5 @@ public enum TemperatureMetricName {
     public static let ssdInternal = "ssd.temperature.internal"
     public static let battery = "battery.temperature"
     public static let systemHottest = "system.temperature.hottest"
+    public static let sensorTemperatureRaw = "sensor.temperature.raw"
 }

@@ -56,7 +56,48 @@ public final actor TemperatureCapabilityService {
             }
         }
 
+        for domain in TemperatureDomain.allCases where capabilitiesByDomain[domain] == nil {
+            capabilitiesByDomain[domain] = makeUnsupportedCapability(
+                sessionID: sessionID,
+                domain: domain,
+                timestamp: timestamp
+            )
+        }
+
         return capabilitiesByDomain
+    }
+
+    private func makeUnsupportedCapability(
+        sessionID: UUID,
+        domain: TemperatureDomain,
+        timestamp: Date
+    ) -> TemperatureCapability {
+        TemperatureCapability(
+            id: UUID(),
+            sessionID: sessionID,
+            domain: domain,
+            source: defaultSource(for: domain),
+            supported: false,
+            readable: false,
+            reasonCode: "unsupported",
+            reasonMessage: "unsupported",
+            rawKey: nil,
+            detectedAt: timestamp,
+            updatedAt: timestamp
+        )
+    }
+
+    private func defaultSource(for domain: TemperatureDomain) -> TemperatureSource {
+        switch domain {
+        case .cpu, .gpu, .system, .sensor:
+            return .hidSensors
+        case .memory:
+            return .smc
+        case .ssd:
+            return .nvmeSMART
+        case .battery:
+            return .batteryIORegistry
+        }
     }
 
     private func normalize(_ capability: TemperatureCapability) -> TemperatureCapability {
