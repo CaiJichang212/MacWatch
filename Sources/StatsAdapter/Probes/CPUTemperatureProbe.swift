@@ -132,7 +132,8 @@ public struct CPUTemperatureProbe: TemperatureProbe {
         }
 
         let rawKeys = sortedReadings.map(\.rawKey).joined(separator: ",")
-        var samples: [TemperatureSample] = [
+        let average = sortedReadings.map(\.valueCelsius).reduce(0, +) / Double(sortedReadings.count)
+        return [
             try! TemperatureSample.makeValid(
                 sessionID: sessionID,
                 timestamp: timestamp,
@@ -147,30 +148,22 @@ public struct CPUTemperatureProbe: TemperatureProbe {
                     "rawKeys": rawKeys,
                     "sourcePriority": "\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)",
                 ]
-            )
+            ),
+            try! TemperatureSample.makeValid(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                metricName: TemperatureMetricName.cpuAverage,
+                domain: .cpu,
+                deviceID: "cpu-package",
+                displayName: "CPU Average",
+                valueCelsius: average,
+                source: winningSource,
+                attributes: [
+                    "rawKeys": rawKeys,
+                    "sourcePriority": "\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)",
+                ]
+            ),
         ]
-
-        if sortedReadings.count >= 2 {
-            let average = sortedReadings.map(\.valueCelsius).reduce(0, +) / Double(sortedReadings.count)
-            samples.append(
-                try! TemperatureSample.makeValid(
-                    sessionID: sessionID,
-                    timestamp: timestamp,
-                    metricName: TemperatureMetricName.cpuAverage,
-                    domain: .cpu,
-                    deviceID: "cpu-package",
-                    displayName: "CPU Average",
-                    valueCelsius: average,
-                    source: winningSource,
-                    attributes: [
-                        "rawKeys": rawKeys,
-                        "sourcePriority": "\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)",
-                    ]
-                )
-            )
-        }
-
-        return samples
     }
 
     private func hidCPUReadings() -> [RawTemperatureReading] {

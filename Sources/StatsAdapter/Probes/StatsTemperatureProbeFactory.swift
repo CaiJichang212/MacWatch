@@ -22,7 +22,6 @@ public struct StatsTemperatureProbeFactory {
 
     public func makeSlowProbes() -> [any TemperatureProbe] {
         [
-            MemoryTemperatureProbe(),
             SSDTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
             BatteryTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
         ]

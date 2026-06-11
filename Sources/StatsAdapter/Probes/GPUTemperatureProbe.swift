@@ -44,20 +44,13 @@ public struct GPUTemperatureProbe: TemperatureProbe {
                 return (rawKey, value)
             }
         if let hottest = hidReadings.max(by: { $0.1 < $1.1 }) {
-            return [
-                try! TemperatureSample.makeValid(
-                    sessionID: sessionID,
-                    timestamp: timestamp,
-                    metricName: TemperatureMetricName.gpuHottest,
-                    domain: .gpu,
-                    deviceID: "gpu-die",
-                    displayName: "GPU Hottest",
-                    valueCelsius: hottest.1,
-                    source: .hidSensors,
-                    rawKey: hottest.0,
-                    attributes: ["rawKeys": hidReadings.map(\.0).joined(separator: ",")]
-                )
-            ]
+            return makeValidSamples(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                readings: hidReadings,
+                hottest: hottest,
+                source: .hidSensors
+            )
         }
 
         let platform = platformDetector.detect() ?? .intel
@@ -68,20 +61,13 @@ public struct GPUTemperatureProbe: TemperatureProbe {
             return (rawKey, value)
         }
         if let hottest = smcReadings.max(by: { $0.1 < $1.1 }) {
-            return [
-                try! TemperatureSample.makeValid(
-                    sessionID: sessionID,
-                    timestamp: timestamp,
-                    metricName: TemperatureMetricName.gpuHottest,
-                    domain: .gpu,
-                    deviceID: "gpu-die",
-                    displayName: "GPU Hottest",
-                    valueCelsius: hottest.1,
-                    source: .smc,
-                    rawKey: hottest.0,
-                    attributes: ["rawKeys": smcReadings.map(\.0).joined(separator: ",")]
-                )
-            ]
+            return makeValidSamples(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                readings: smcReadings,
+                hottest: hottest,
+                source: .smc
+            )
         }
 
         return [unavailableSample(
@@ -93,6 +79,42 @@ public struct GPUTemperatureProbe: TemperatureProbe {
 
     private func isValid(_ value: Double) -> Bool {
         TemperatureSample.isValidTemperatureValue(value)
+    }
+
+    private func makeValidSamples(
+        sessionID: UUID,
+        timestamp: Date,
+        readings: [(String, Double)],
+        hottest: (String, Double),
+        source: TemperatureSource
+    ) -> [TemperatureSample] {
+        let rawKeys = readings.map(\.0).sorted().joined(separator: ",")
+        let average = readings.map(\.1).reduce(0, +) / Double(readings.count)
+        return [
+            try! TemperatureSample.makeValid(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                metricName: TemperatureMetricName.gpuHottest,
+                domain: .gpu,
+                deviceID: "gpu-die",
+                displayName: "GPU Hottest",
+                valueCelsius: hottest.1,
+                source: source,
+                rawKey: hottest.0,
+                attributes: ["rawKeys": rawKeys]
+            ),
+            try! TemperatureSample.makeValid(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                metricName: TemperatureMetricName.gpuAverage,
+                domain: .gpu,
+                deviceID: "gpu-die",
+                displayName: "GPU Average",
+                valueCelsius: average,
+                source: source,
+                attributes: ["rawKeys": rawKeys]
+            ),
+        ]
     }
 
     private func capability(from sample: TemperatureSample, sessionID: UUID, timestamp: Date) -> TemperatureCapability {

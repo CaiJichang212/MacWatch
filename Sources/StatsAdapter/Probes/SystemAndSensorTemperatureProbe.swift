@@ -112,7 +112,6 @@ public struct SystemTemperatureProbe: TemperatureProbe {
             Set(
                 catalog.smcCPUKeys(for: platform)
                     + catalog.smcGPUKeys(for: platform)
-                    + catalog.smcMemoryKeys(for: platform)
                     + catalog.smcSSDKeys()
                     + catalog.smcBatteryKeys()
             )
