@@ -1,11 +1,6 @@
 import Foundation
 import MacWatchCore
 
-private struct RawTemperatureReading: Sendable {
-    let valueCelsius: Double
-    let rawKey: String
-}
-
 public struct SystemTemperatureProbe: TemperatureProbe {
     public let id = "system.primary"
     public let domain: TemperatureDomain = .system
@@ -16,17 +11,31 @@ public struct SystemTemperatureProbe: TemperatureProbe {
     private let hidReader: any AppleSiliconTemperatureReading
     private let smcReader: any SMCValueReading
     private let catalog: AppleSiliconSensorCatalog
+    private let snapshotProvider: (any StatsTemperatureSensorSnapshotProviding)?
 
     public init(
         platformDetector: any ApplePlatformDetecting = ApplePlatformDetector(),
         hidReader: any AppleSiliconTemperatureReading = AppleSiliconHIDTemperatureReader(),
         smcReader: any SMCValueReading = SMCReadOnlyClient(),
-        catalog: AppleSiliconSensorCatalog = AppleSiliconSensorCatalog()
+        catalog: AppleSiliconSensorCatalog = AppleSiliconSensorCatalog(),
+        snapshotProvider: (any StatsTemperatureSensorSnapshotProviding)? = nil
     ) {
         self.platformDetector = platformDetector
         self.hidReader = hidReader
         self.smcReader = smcReader
         self.catalog = catalog
+        self.snapshotProvider = snapshotProvider
+    }
+
+    public init(
+        snapshotProvider: any StatsTemperatureSensorSnapshotProviding,
+        catalog: AppleSiliconSensorCatalog = AppleSiliconSensorCatalog()
+    ) {
+        self.platformDetector = ApplePlatformDetector()
+        self.hidReader = AppleSiliconHIDTemperatureReader()
+        self.smcReader = SMCReadOnlyClient()
+        self.catalog = catalog
+        self.snapshotProvider = snapshotProvider
     }
 
     public func detect(sessionID: UUID, at timestamp: Date) async -> TemperatureCapability {
@@ -47,32 +56,19 @@ public struct SystemTemperatureProbe: TemperatureProbe {
     }
 
     public func read(sessionID: UUID, at timestamp: Date) async -> [TemperatureSample] {
-        let hidReadings = collectHIDReadings()
+        let snapshot = readSnapshot()
+        let systemReadings = snapshot.readings(for: .system)
 
-        if let hottest = hottestReading(from: hidReadings) {
+        if let hottest = hottestReading(from: systemReadings) {
             return [makeValidSample(
                 sessionID: sessionID,
                 timestamp: timestamp,
                 value: hottest.valueCelsius,
                 rawKey: hottest.rawKey,
-                source: .hidSensors,
+                source: hottest.source,
                 attributes: [
-                    "rawKeys": hidReadings.map(\.rawKey).sorted().joined(separator: ","),
-                    "sourcePriority": sourcePriorityValue,
-                ]
-            )]
-        }
-
-        let smcReadings = collectSMCReadings()
-        if let hottest = hottestReading(from: smcReadings) {
-            return [makeValidSample(
-                sessionID: sessionID,
-                timestamp: timestamp,
-                value: hottest.valueCelsius,
-                rawKey: hottest.rawKey,
-                source: .smc,
-                attributes: [
-                    "rawKeys": smcReadings.map(\.rawKey).sorted().joined(separator: ","),
+                    "rawKeys": systemReadings.map(\.rawKey).sorted().joined(separator: ","),
+                    "sourceSet": Self.sourceSet(from: systemReadings),
                     "sourcePriority": sourcePriorityValue,
                 ]
             )]
@@ -81,51 +77,27 @@ public struct SystemTemperatureProbe: TemperatureProbe {
         return [makeReadFailedSample(
             sessionID: sessionID,
             timestamp: timestamp,
-            availableHIDKeys: hidReadings.map(\.rawKey).sorted(),
-            availableSMCKeys: allSMCKeys().sorted()
+            availableRawKeys: snapshot.readings.map(\.rawKey).sorted(),
+            availableSMCKeys: snapshot.availableSMCKeys
         )]
     }
 
-    private func collectHIDReadings() -> [RawTemperatureReading] {
-        hidReader.readTemperatureValues().compactMap { rawKey, value in
-            guard isValidTemperature(value) else {
-                return nil
-            }
-
-            return RawTemperatureReading(valueCelsius: value, rawKey: rawKey)
+    private func readSnapshot() -> StatsTemperatureSensorSnapshot {
+        if let snapshotProvider {
+            return snapshotProvider.readSnapshot()
         }
-    }
-
-    private func collectSMCReadings() -> [RawTemperatureReading] {
-        allSMCKeys().compactMap { rawKey in
-            guard let value = smcReader.getValue(rawKey), isValidTemperature(value) else {
-                return nil
-            }
-
-            return RawTemperatureReading(valueCelsius: value, rawKey: rawKey)
-        }
-    }
-
-    private func allSMCKeys() -> [String] {
-        let platform = platformDetector.detect() ?? .intel
-        let statsTemperatureKeys = smcReader
-            .getAllKeys()
-            .filter(catalog.isStatsTemperatureSMCKey)
-        return Array(
-            Set(
-                catalog.smcCPUKeys(for: platform)
-                    + catalog.smcGPUKeys(for: platform)
-                    + catalog.smcSSDKeys()
-                    + catalog.smcBatteryKeys()
-                    + catalog.smcSystemKeys()
-                    + statsTemperatureKeys
-            )
-        ).sorted()
+        return StatsTemperatureSensorSnapshotProvider(
+            platformDetector: platformDetector,
+            hidReader: hidReader,
+            smcReader: smcReader,
+            catalog: catalog,
+            cacheDuration: 0
+        ).readSnapshot()
     }
 
     private func hottestReading(
-        from readings: [RawTemperatureReading]
-    ) -> RawTemperatureReading? {
+        from readings: [StatsTemperatureSensorReading]
+    ) -> StatsTemperatureSensorReading? {
         readings.max {
             let lhsValue = $0.valueCelsius
             let rhsValue = $1.valueCelsius
@@ -167,7 +139,7 @@ public struct SystemTemperatureProbe: TemperatureProbe {
     private func makeReadFailedSample(
         sessionID: UUID,
         timestamp: Date,
-        availableHIDKeys: [String],
+        availableRawKeys: [String],
         availableSMCKeys: [String]
     ) -> TemperatureSample {
         try! TemperatureSample.makeInvalid(
@@ -181,7 +153,7 @@ public struct SystemTemperatureProbe: TemperatureProbe {
             source: .hidSensors,
             errorCode: "temperatureUnavailable",
             attributes: [
-                "availableRawKeys": availableHIDKeys.joined(separator: ","),
+                "availableRawKeys": availableRawKeys.joined(separator: ","),
                 "attemptedSMCKeys": availableSMCKeys.joined(separator: ","),
                 "readerError": "temperatureUnavailable",
                 "sourcePriority": sourcePriorityValue,
@@ -191,6 +163,14 @@ public struct SystemTemperatureProbe: TemperatureProbe {
 
     private func isValidTemperature(_ value: Double) -> Bool {
         TemperatureSample.isValidTemperatureValue(value)
+    }
+
+    private static func sourceSet(from readings: [StatsTemperatureSensorReading]) -> String {
+        let sources = Set(readings.map(\.source))
+        return [TemperatureSource.hidSensors, .smc]
+            .filter(sources.contains)
+            .map(\.rawValue)
+            .joined(separator: ",")
     }
 }
 
@@ -202,13 +182,25 @@ public struct SensorTemperatureProbe: TemperatureProbe {
 
     private let hidReader: any AppleSiliconTemperatureReading
     private let catalog: AppleSiliconSensorCatalog
+    private let snapshotProvider: (any StatsTemperatureSensorSnapshotProviding)?
 
     public init(
         hidReader: any AppleSiliconTemperatureReading = AppleSiliconHIDTemperatureReader(),
-        catalog: AppleSiliconSensorCatalog = AppleSiliconSensorCatalog()
+        catalog: AppleSiliconSensorCatalog = AppleSiliconSensorCatalog(),
+        snapshotProvider: (any StatsTemperatureSensorSnapshotProviding)? = nil
     ) {
         self.hidReader = hidReader
         self.catalog = catalog
+        self.snapshotProvider = snapshotProvider
+    }
+
+    public init(
+        snapshotProvider: any StatsTemperatureSensorSnapshotProviding,
+        catalog: AppleSiliconSensorCatalog = AppleSiliconSensorCatalog()
+    ) {
+        self.hidReader = AppleSiliconHIDTemperatureReader()
+        self.catalog = catalog
+        self.snapshotProvider = snapshotProvider
     }
 
     public func detect(sessionID: UUID, at timestamp: Date) async -> TemperatureCapability {
@@ -229,9 +221,10 @@ public struct SensorTemperatureProbe: TemperatureProbe {
     }
 
     public func read(sessionID: UUID, at timestamp: Date) async -> [TemperatureSample] {
-        let sensorReadings = collectUnknownHIDReadings()
+        let snapshot = readSnapshot()
+        let sensorReadings = snapshot.readings(for: .sensor)
         guard let hottest = hottestReading(from: sensorReadings) else {
-            return [makeReadFailedSample(sessionID: sessionID, timestamp: timestamp)]
+            return [makeReadFailedSample(sessionID: sessionID, timestamp: timestamp, snapshot: snapshot)]
         }
 
         return [
@@ -250,26 +243,27 @@ public struct SensorTemperatureProbe: TemperatureProbe {
                         .map(\.rawKey)
                         .sorted()
                         .joined(separator: ","),
+                    "sourceSet": Self.sourceSet(from: sensorReadings),
                     "sourcePriority": TemperatureSource.hidSensors.rawValue,
                 ]
             )
         ]
     }
 
-    private func collectUnknownHIDReadings() -> [RawTemperatureReading] {
-        hidReader.readTemperatureValues().compactMap { rawKey, value in
-            guard catalog.domain(forRawKey: rawKey) == nil,
-                  isValidTemperature(value) else {
-                return nil
-            }
-
-            return RawTemperatureReading(valueCelsius: value, rawKey: rawKey)
+    private func readSnapshot() -> StatsTemperatureSensorSnapshot {
+        if let snapshotProvider {
+            return snapshotProvider.readSnapshot()
         }
+        return StatsTemperatureSensorSnapshotProvider(
+            hidReader: hidReader,
+            catalog: catalog,
+            cacheDuration: 0
+        ).readSnapshot()
     }
 
     private func hottestReading(
-        from readings: [RawTemperatureReading]
-    ) -> RawTemperatureReading? {
+        from readings: [StatsTemperatureSensorReading]
+    ) -> StatsTemperatureSensorReading? {
         readings.max {
             let lhsValue = $0.valueCelsius
             let rhsValue = $1.valueCelsius
@@ -282,8 +276,12 @@ public struct SensorTemperatureProbe: TemperatureProbe {
         }
     }
 
-    private func makeReadFailedSample(sessionID: UUID, timestamp: Date) -> TemperatureSample {
-        let rawKeys = hidReader.readTemperatureValues().keys.sorted()
+    private func makeReadFailedSample(
+        sessionID: UUID,
+        timestamp: Date,
+        snapshot: StatsTemperatureSensorSnapshot
+    ) -> TemperatureSample {
+        let rawKeys = snapshot.readings.map(\.rawKey).sorted()
         return try! TemperatureSample.makeInvalid(
             sessionID: sessionID,
             timestamp: timestamp,
@@ -304,5 +302,13 @@ public struct SensorTemperatureProbe: TemperatureProbe {
 
     private func isValidTemperature(_ value: Double) -> Bool {
         TemperatureSample.isValidTemperatureValue(value)
+    }
+
+    private static func sourceSet(from readings: [StatsTemperatureSensorReading]) -> String {
+        let sources = Set(readings.map(\.source))
+        return [TemperatureSource.hidSensors, .smc]
+            .filter(sources.contains)
+            .map(\.rawValue)
+            .joined(separator: ",")
     }
 }

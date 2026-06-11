@@ -1,41 +1,41 @@
 import MacWatchCore
 
 public struct StatsTemperatureProbeFactory {
-    private let temperatureSensorSnapshotProvider: TemperatureSensorSnapshotProvider
+    private let temperatureSensorSnapshotProvider: StatsTemperatureSensorSnapshotProvider
 
     public init(
-        temperatureSensorSnapshotProvider: TemperatureSensorSnapshotProvider = TemperatureSensorSnapshotProvider()
+        temperatureSensorSnapshotProvider: StatsTemperatureSensorSnapshotProvider = StatsTemperatureSensorSnapshotProvider()
     ) {
         self.temperatureSensorSnapshotProvider = temperatureSensorSnapshotProvider
     }
 
     public func makeCPUOnlyProbes() -> [any TemperatureProbe] {
-        [CPUTemperatureProbe(hidReader: temperatureSensorSnapshotProvider)]
+        [CPUTemperatureProbe(snapshotProvider: temperatureSensorSnapshotProvider)]
     }
 
     public func makeFastProbes() -> [any TemperatureProbe] {
         [
-            CPUTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
-            GPUTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
+            CPUTemperatureProbe(snapshotProvider: temperatureSensorSnapshotProvider),
+            GPUTemperatureProbe(snapshotProvider: temperatureSensorSnapshotProvider),
         ]
     }
 
     public func makeSlowProbes() -> [any TemperatureProbe] {
         [
-            SSDTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
-            BatteryTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
+            SSDTemperatureProbe(snapshotProvider: temperatureSensorSnapshotProvider),
+            BatteryTemperatureProbe(snapshotProvider: temperatureSensorSnapshotProvider),
         ]
     }
 
     public func makeSystemProbes() -> [any TemperatureProbe] {
         [
-            SystemTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
+            SystemTemperatureProbe(snapshotProvider: temperatureSensorSnapshotProvider),
         ]
     }
 
     public func makeSensorProbes() -> [any TemperatureProbe] {
         [
-            SensorTemperatureProbe(hidReader: temperatureSensorSnapshotProvider),
+            SensorTemperatureProbe(snapshotProvider: temperatureSensorSnapshotProvider),
         ]
     }
 

@@ -11,17 +11,32 @@ public struct BatteryTemperatureProbe: TemperatureProbe {
     private let hidReader: any AppleSiliconTemperatureReading
     private let smcReader: any SMCValueReading
     private let catalog: AppleSiliconSensorCatalog
+    private let snapshotProvider: (any StatsTemperatureSensorSnapshotProviding)?
 
     public init(
         batteryReader: any BatteryTemperatureReadingSource = BatteryTemperatureIORegistryReader(),
         hidReader: any AppleSiliconTemperatureReading = AppleSiliconHIDTemperatureReader(),
         smcReader: any SMCValueReading = SMCReadOnlyClient(),
-        catalog: AppleSiliconSensorCatalog = AppleSiliconSensorCatalog()
+        catalog: AppleSiliconSensorCatalog = AppleSiliconSensorCatalog(),
+        snapshotProvider: (any StatsTemperatureSensorSnapshotProviding)? = nil
     ) {
         self.batteryReader = batteryReader
         self.hidReader = hidReader
         self.smcReader = smcReader
         self.catalog = catalog
+        self.snapshotProvider = snapshotProvider
+    }
+
+    public init(
+        batteryReader: any BatteryTemperatureReadingSource = BatteryTemperatureIORegistryReader(),
+        snapshotProvider: any StatsTemperatureSensorSnapshotProviding,
+        catalog: AppleSiliconSensorCatalog = AppleSiliconSensorCatalog()
+    ) {
+        self.batteryReader = batteryReader
+        self.hidReader = AppleSiliconHIDTemperatureReader()
+        self.smcReader = SMCReadOnlyClient()
+        self.catalog = catalog
+        self.snapshotProvider = snapshotProvider
     }
 
     public func detect(sessionID: UUID, at timestamp: Date) async -> TemperatureCapability {
@@ -96,12 +111,8 @@ public struct BatteryTemperatureProbe: TemperatureProbe {
             ]
         }
 
-        let hidValue = hidReader.readTemperatureValues()
-            .first {
-                $0.key.localizedCaseInsensitiveContains("gas gauge battery")
-                    && TemperatureSample.isValidTemperatureValue($0.value)
-            }
-        if let hidValue {
+        let snapshotReadings = readSnapshot().readings(for: .battery)
+        if let hottest = snapshotReadings.max(by: { $0.valueCelsius < $1.valueCelsius }) {
             return [
                 try! TemperatureSample.makeValid(
                     sessionID: sessionID,
@@ -110,31 +121,14 @@ public struct BatteryTemperatureProbe: TemperatureProbe {
                     domain: .battery,
                     deviceID: "battery-pack",
                     displayName: "Battery",
-                    valueCelsius: hidValue.value,
-                    source: .hidSensors,
-                    rawKey: hidValue.key
-                )
-            ]
-        }
-
-        let smcValues = catalog.smcBatteryKeys().compactMap { rawKey -> (String, Double)? in
-            guard let value = smcReader.getValue(rawKey), TemperatureSample.isValidTemperatureValue(value) else {
-                return nil
-            }
-            return (rawKey, value)
-        }
-        if let hottest = smcValues.max(by: { $0.1 < $1.1 }) {
-            return [
-                try! TemperatureSample.makeValid(
-                    sessionID: sessionID,
-                    timestamp: timestamp,
-                    metricName: TemperatureMetricName.battery,
-                    domain: .battery,
-                    deviceID: "battery-pack",
-                    displayName: "Battery",
-                    valueCelsius: hottest.1,
-                    source: .smc,
-                    rawKey: hottest.0
+                    valueCelsius: hottest.valueCelsius,
+                    source: hottest.source,
+                    rawKey: hottest.rawKey,
+                    attributes: [
+                        "rawKeys": snapshotReadings.map(\.rawKey).sorted().joined(separator: ","),
+                        "sourceSet": Self.sourceSet(from: snapshotReadings),
+                        "sourcePriority": "\(TemperatureSource.batteryIORegistry.rawValue),\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)",
+                    ]
                 )
             ]
         }
@@ -158,5 +152,25 @@ public struct BatteryTemperatureProbe: TemperatureProbe {
                 ]
             )
         ]
+    }
+
+    private func readSnapshot() -> StatsTemperatureSensorSnapshot {
+        if let snapshotProvider {
+            return snapshotProvider.readSnapshot()
+        }
+        return StatsTemperatureSensorSnapshotProvider(
+            hidReader: hidReader,
+            smcReader: smcReader,
+            catalog: catalog,
+            cacheDuration: 0
+        ).readSnapshot()
+    }
+
+    private static func sourceSet(from readings: [StatsTemperatureSensorReading]) -> String {
+        let sources = Set(readings.map(\.source))
+        return [TemperatureSource.hidSensors, .smc]
+            .filter(sources.contains)
+            .map(\.rawValue)
+            .joined(separator: ",")
     }
 }

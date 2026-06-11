@@ -11,17 +11,32 @@ public struct SSDTemperatureProbe: TemperatureProbe {
     private let hidReader: any AppleSiliconTemperatureReading
     private let smcReader: any SMCValueReading
     private let catalog: AppleSiliconSensorCatalog
+    private let snapshotProvider: (any StatsTemperatureSensorSnapshotProviding)?
 
     public init(
         nvmeReader: any NVMeSMARTTemperatureReadingSource = NVMeSMARTTemperatureReader(),
         hidReader: any AppleSiliconTemperatureReading = AppleSiliconHIDTemperatureReader(),
         smcReader: any SMCValueReading = SMCReadOnlyClient(),
-        catalog: AppleSiliconSensorCatalog = AppleSiliconSensorCatalog()
+        catalog: AppleSiliconSensorCatalog = AppleSiliconSensorCatalog(),
+        snapshotProvider: (any StatsTemperatureSensorSnapshotProviding)? = nil
     ) {
         self.nvmeReader = nvmeReader
         self.hidReader = hidReader
         self.smcReader = smcReader
         self.catalog = catalog
+        self.snapshotProvider = snapshotProvider
+    }
+
+    public init(
+        nvmeReader: any NVMeSMARTTemperatureReadingSource = NVMeSMARTTemperatureReader(),
+        snapshotProvider: any StatsTemperatureSensorSnapshotProviding,
+        catalog: AppleSiliconSensorCatalog = AppleSiliconSensorCatalog()
+    ) {
+        self.nvmeReader = nvmeReader
+        self.hidReader = AppleSiliconHIDTemperatureReader()
+        self.smcReader = SMCReadOnlyClient()
+        self.catalog = catalog
+        self.snapshotProvider = snapshotProvider
     }
 
     public func detect(sessionID: UUID, at timestamp: Date) async -> TemperatureCapability {
@@ -67,13 +82,8 @@ public struct SSDTemperatureProbe: TemperatureProbe {
             ]
         }
 
-        let hidValues = hidReader.readTemperatureValues().compactMap { rawKey, value -> (String, Double)? in
-            guard catalog.isSSDHIDKey(rawKey), TemperatureSample.isValidTemperatureValue(value) else {
-                return nil
-            }
-            return (rawKey, value)
-        }
-        if let hottest = hidValues.max(by: { $0.1 < $1.1 }) {
+        let snapshotReadings = readSnapshot().readings(for: .ssd)
+        if let hottest = preferredFallbackReading(from: snapshotReadings) {
             return [
                 try! TemperatureSample.makeValid(
                     sessionID: sessionID,
@@ -82,33 +92,13 @@ public struct SSDTemperatureProbe: TemperatureProbe {
                     domain: .ssd,
                     deviceID: "internal-ssd",
                     displayName: "Internal SSD",
-                    valueCelsius: hottest.1,
-                    source: .hidSensors,
-                    rawKey: hottest.0,
-                    attributes: fallbackAttributes(hasInternalSMARTDisk: hasInternalSMARTDisk)
-                )
-            ]
-        }
-
-        let smcValues = catalog.smcSSDKeys().compactMap { rawKey -> (String, Double)? in
-            guard let value = smcReader.getValue(rawKey), TemperatureSample.isValidTemperatureValue(value) else {
-                return nil
-            }
-            return (rawKey, value)
-        }
-        if let hottest = smcValues.max(by: { $0.1 < $1.1 }) {
-            return [
-                try! TemperatureSample.makeValid(
-                    sessionID: sessionID,
-                    timestamp: timestamp,
-                    metricName: TemperatureMetricName.ssdInternal,
-                    domain: .ssd,
-                    deviceID: "internal-ssd",
-                    displayName: "Internal SSD",
-                    valueCelsius: hottest.1,
-                    source: .smc,
-                    rawKey: hottest.0,
-                    attributes: fallbackAttributes(hasInternalSMARTDisk: hasInternalSMARTDisk)
+                    valueCelsius: hottest.valueCelsius,
+                    source: hottest.source,
+                    rawKey: hottest.rawKey,
+                    attributes: fallbackAttributes(
+                        hasInternalSMARTDisk: hasInternalSMARTDisk,
+                        readings: snapshotReadings
+                    )
                 )
             ]
         }
@@ -141,10 +131,15 @@ public struct SSDTemperatureProbe: TemperatureProbe {
         "\(TemperatureSource.nvmeSMART.rawValue),\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)"
     }
 
-    private func fallbackAttributes(hasInternalSMARTDisk: Bool) -> [String: String] {
+    private func fallbackAttributes(
+        hasInternalSMARTDisk: Bool,
+        readings: [StatsTemperatureSensorReading]
+    ) -> [String: String] {
         [
+            "rawKeys": readings.map(\.rawKey).sorted().joined(separator: ","),
             "smartField": "temperature",
             "smartStatus": hasInternalSMARTDisk ? "readFailed" : "internalSMARTDiskUnavailable",
+            "sourceSet": Self.sourceSet(from: readings),
             "sourcePriority": sourcePriority,
         ]
     }
@@ -157,5 +152,35 @@ public struct SSDTemperatureProbe: TemperatureProbe {
             return "No internal NVMe SMART-capable disk is available and no NAND HID/SMC temperature fallback was readable."
         }
         return "No readable internal SSD temperature from NVMe SMART, HID Sensors, or SMC."
+    }
+
+    private func readSnapshot() -> StatsTemperatureSensorSnapshot {
+        if let snapshotProvider {
+            return snapshotProvider.readSnapshot()
+        }
+        return StatsTemperatureSensorSnapshotProvider(
+            hidReader: hidReader,
+            smcReader: smcReader,
+            catalog: catalog,
+            cacheDuration: 0
+        ).readSnapshot()
+    }
+
+    private func preferredFallbackReading(
+        from readings: [StatsTemperatureSensorReading]
+    ) -> StatsTemperatureSensorReading? {
+        let hidReadings = readings.filter { $0.source == .hidSensors }
+        if let hottestHID = hidReadings.max(by: { $0.valueCelsius < $1.valueCelsius }) {
+            return hottestHID
+        }
+        return readings.max(by: { $0.valueCelsius < $1.valueCelsius })
+    }
+
+    private static func sourceSet(from readings: [StatsTemperatureSensorReading]) -> String {
+        let sources = Set(readings.map(\.source))
+        return [TemperatureSource.hidSensors, .smc]
+            .filter(sources.contains)
+            .map(\.rawValue)
+            .joined(separator: ",")
     }
 }
