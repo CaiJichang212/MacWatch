@@ -59,6 +59,14 @@ enum TemperatureMetricCatalog {
             menuBarMetric: nil,
             isMVPCompatibilityRequired: true
         ),
+        TemperatureMetricDescriptor(
+            id: .sensor,
+            domain: .sensor,
+            metricName: TemperatureMetricName.sensorTemperatureRaw,
+            title: "Sensor",
+            menuBarMetric: nil,
+            isMVPCompatibilityRequired: true
+        ),
     ]
 
     static let compatibilityMetrics = overviewMetrics

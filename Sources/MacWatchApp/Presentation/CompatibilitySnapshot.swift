@@ -27,7 +27,7 @@ struct CompatibilitySnapshot: Equatable {
                 statusText: TemperatureFormatter.statusText(sample: sample, capability: capability),
                 sourceText: TemperatureFormatter.sourceText(sample: sample, capability: capability),
                 reasonText: TemperatureFormatter.reasonText(sample: sample, capability: capability),
-                rawKey: sample?.rawKey ?? capability?.rawKey,
+                rawKey: TemperatureFormatter.rawKeyText(sample: sample, capability: capability),
                 updatedAt: sample?.timestamp ?? capability?.updatedAt
             )
         }

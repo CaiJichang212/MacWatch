@@ -57,7 +57,7 @@ struct TemperatureOverviewSnapshot: Equatable {
                 sourceText: TemperatureFormatter.sourceText(sample: sample, capability: capability),
                 reasonText: TemperatureFormatter.reasonText(sample: sample, capability: capability),
                 updatedAt: sample?.timestamp ?? capability?.updatedAt,
-                rawKey: sample?.rawKey ?? capability?.rawKey,
+                rawKey: TemperatureFormatter.rawKeyText(sample: sample, capability: capability),
                 isStale: TemperatureFormatter.isStale(sample: sample)
             )
         }

@@ -95,6 +95,23 @@ enum TemperatureFormatter {
         sample?.source.rawValue ?? capability?.source.rawValue ?? "--"
     }
 
+    static func rawKeyText(sample: TemperatureSample?, capability: TemperatureCapability?) -> String? {
+        if let rawKey = sample?.rawKey, rawKey.isEmpty == false {
+            return rawKey
+        }
+
+        if let sample {
+            if let rawKeys = sample.attributes["rawKeys"], rawKeys.isEmpty == false {
+                return rawKeys
+            }
+            if let attemptedRawKeys = sample.attributes["attemptedRawKeys"], attemptedRawKeys.isEmpty == false {
+                return attemptedRawKeys
+            }
+        }
+
+        return capability?.rawKey
+    }
+
     static func isStale(sample: TemperatureSample?) -> Bool {
         sample?.quality == .stale
     }
