@@ -91,8 +91,6 @@ public final actor TemperatureCapabilityService {
         switch domain {
         case .cpu, .gpu, .system, .sensor:
             return .hidSensors
-        case .memory:
-            return .smc
         case .ssd:
             return .nvmeSMART
         case .battery:

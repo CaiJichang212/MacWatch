@@ -126,7 +126,7 @@ public final class TemperatureMonitorService {
 
     private func hottestValidSample(from samples: [TemperatureSample]) -> TemperatureSample? {
         samples
-            .filter { $0.quality == .valid }
+            .filter { $0.quality == .valid && TemperatureMetricName.participatesInGlobalHottest($0.metricName) }
             .max { lhs, rhs in
                 (lhs.valueCelsius ?? -.infinity) < (rhs.valueCelsius ?? -.infinity)
             }

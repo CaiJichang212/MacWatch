@@ -141,7 +141,7 @@ public final actor LiveTemperatureStore {
 
     private func hottestValidSample() -> TemperatureSample? {
         state.samplesByMetricName.values
-            .filter { $0.quality == .valid }
+            .filter { $0.quality == .valid && TemperatureMetricName.participatesInGlobalHottest($0.metricName) }
             .max { lhs, rhs in
                 (lhs.valueCelsius ?? -.infinity) < (rhs.valueCelsius ?? -.infinity)
             }

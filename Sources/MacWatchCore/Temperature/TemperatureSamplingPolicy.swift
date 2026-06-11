@@ -27,7 +27,7 @@ public struct TemperatureSamplingPolicy: Sendable, Equatable {
                 historyInterval: 10,
                 minimumInterval: 5
             )
-        case .memory, .ssd, .battery:
+        case .ssd, .battery:
             rawPolicy = TemperatureSamplingPolicy(
                 realtimeInterval: 30,
                 historyInterval: 60,
