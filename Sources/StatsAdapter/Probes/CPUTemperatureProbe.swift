@@ -112,23 +112,23 @@ public struct CPUTemperatureProbe: TemperatureProbe {
                 chosenReadings = smcReadings
                 winningSource = .smc
             } else {
-                return [makeReadFailedSample(
+                return makeReadFailedSamples(
                     sessionID: sessionID,
                     timestamp: timestamp,
                     availableHIDKeys: hidReader.readTemperatureValues().keys.sorted(),
                     availableSMCKeys: smcReader.getAllKeys()
-                )]
+                )
             }
         }
 
         let sortedReadings = chosenReadings.sorted(by: isPreferred(lhs:rhs:))
         guard let hottest = sortedReadings.max(by: { $0.valueCelsius < $1.valueCelsius }) else {
-            return [makeReadFailedSample(
+            return makeReadFailedSamples(
                 sessionID: sessionID,
                 timestamp: timestamp,
                 availableHIDKeys: hidReader.readTemperatureValues().keys.sorted(),
                 availableSMCKeys: smcReader.getAllKeys()
-            )]
+            )
         }
 
         let rawKeys = sortedReadings.map(\.rawKey).joined(separator: ",")
@@ -226,33 +226,59 @@ public struct CPUTemperatureProbe: TemperatureProbe {
         )
     }
 
-    private func makeReadFailedSample(
+    private func makeReadFailedSamples(
         sessionID: UUID,
         timestamp: Date,
         availableHIDKeys: [String],
         availableSMCKeys: [String]
-    ) -> TemperatureSample {
+    ) -> [TemperatureSample] {
         let platform = platformDetector.detect() ?? .intel
         let candidateSMCKeys = catalog.smcCPUKeys(for: platform)
         let attemptedRawKeys = candidateSMCKeys + ["pACC MTR Temp Sensor0", "eACC MTR Temp Sensor0"]
         let matchingSMCKeys = availableSMCKeys.filter(candidateSMCKeys.contains)
+        let attributes = [
+            "attemptedRawKeys": attemptedRawKeys.joined(separator: ","),
+            "availableHIDKeys": availableHIDKeys.joined(separator: ","),
+            "matchingSMCKeys": matchingSMCKeys.joined(separator: ","),
+            "sourcePriority": "\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)",
+        ]
 
-        return try! TemperatureSample.makeInvalid(
+        return [
+            makeReadFailedSample(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                metricName: TemperatureMetricName.cpuHottest,
+                displayName: "CPU Hottest",
+                attributes: attributes
+            ),
+            makeReadFailedSample(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                metricName: TemperatureMetricName.cpuAverage,
+                displayName: "CPU Average",
+                attributes: attributes
+            ),
+        ]
+    }
+
+    private func makeReadFailedSample(
+        sessionID: UUID,
+        timestamp: Date,
+        metricName: String,
+        displayName: String,
+        attributes: [String: String]
+    ) -> TemperatureSample {
+        try! TemperatureSample.makeInvalid(
             sessionID: sessionID,
             timestamp: timestamp,
-            metricName: TemperatureMetricName.cpuHottest,
+            metricName: metricName,
             domain: .cpu,
             deviceID: "cpu-package",
-            displayName: "CPU Hottest",
+            displayName: displayName,
             quality: .readFailed,
             source: .smc,
             errorCode: "temperatureUnavailable",
-            attributes: [
-                "attemptedRawKeys": attemptedRawKeys.joined(separator: ","),
-                "availableHIDKeys": availableHIDKeys.joined(separator: ","),
-                "matchingSMCKeys": matchingSMCKeys.joined(separator: ","),
-                "sourcePriority": "\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)",
-            ]
+            attributes: attributes
         )
     }
 

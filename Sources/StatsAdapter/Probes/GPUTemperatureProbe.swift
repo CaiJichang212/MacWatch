@@ -70,11 +70,11 @@ public struct GPUTemperatureProbe: TemperatureProbe {
             )
         }
 
-        return [unavailableSample(
+        return unavailableSamples(
             sessionID: sessionID,
             timestamp: timestamp,
             ioAcceleratorCandidate: ioAcceleratorReader.readTemperature()
-        )]
+        )
     }
 
     private func isValid(_ value: Double) -> Bool {
@@ -150,11 +150,11 @@ public struct GPUTemperatureProbe: TemperatureProbe {
         )
     }
 
-    private func unavailableSample(
+    private func unavailableSamples(
         sessionID: UUID,
         timestamp: Date,
         ioAcceleratorCandidate: IOAcceleratorTemperatureReading?
-    ) -> TemperatureSample {
+    ) -> [TemperatureSample] {
         let platform = platformDetector.detect() ?? .intel
         var attributes = [
             "attemptedRawKeys": catalog.smcGPUKeys(for: platform).joined(separator: ","),
@@ -166,13 +166,38 @@ public struct GPUTemperatureProbe: TemperatureProbe {
             attributes["candidateSourceDisabled"] = "IOAccelerator \(ioAcceleratorCandidate.statisticsField)"
         }
 
-        return try! TemperatureSample.makeInvalid(
+        return [
+            unavailableSample(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                metricName: TemperatureMetricName.gpuHottest,
+                displayName: "GPU Hottest",
+                attributes: attributes
+            ),
+            unavailableSample(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                metricName: TemperatureMetricName.gpuAverage,
+                displayName: "GPU Average",
+                attributes: attributes
+            ),
+        ]
+    }
+
+    private func unavailableSample(
+        sessionID: UUID,
+        timestamp: Date,
+        metricName: String,
+        displayName: String,
+        attributes: [String: String]
+    ) -> TemperatureSample {
+        try! TemperatureSample.makeInvalid(
             sessionID: sessionID,
             timestamp: timestamp,
-            metricName: TemperatureMetricName.gpuHottest,
+            metricName: metricName,
             domain: .gpu,
             deviceID: "gpu-die",
-            displayName: "GPU Hottest",
+            displayName: displayName,
             quality: .readFailed,
             source: .smc,
             errorCode: "noReadableTemperature",
