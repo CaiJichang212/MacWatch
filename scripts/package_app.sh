@@ -35,10 +35,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
-    if [[ "$CONFIGURATION" == "release" ]]; then
-        swift build -c release
+    if [[ -n "${MACWATCH_TEST_MOCK_BUILD_OUTPUT:-}" ]]; then
+        printf '%s\n' "$MACWATCH_TEST_MOCK_BUILD_OUTPUT" >&2
+    elif [[ "$CONFIGURATION" == "release" ]]; then
+        swift build -c release >&2
     else
-        swift build
+        swift build >&2
     fi
 fi
 

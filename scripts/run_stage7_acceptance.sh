@@ -5,9 +5,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 SUMMARY_JSON="$ROOT_DIR/dist/stage7-summary.json"
+CONFIGURATION="release"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --configuration)
+            CONFIGURATION="$2"
+            shift 2
+            ;;
         --summary-json)
             SUMMARY_JSON="$2"
             shift 2
@@ -24,7 +29,7 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 if [[ "${MACWATCH_TEST_SKIP_BUILD:-0}" != "1" ]]; then
-    scripts/package_app.sh >/dev/null
+    scripts/package_app.sh --configuration "$CONFIGURATION" >/dev/null
 fi
 
 BUNDLE_PATH="$ROOT_DIR/dist/MacWatch.app"
@@ -68,43 +73,160 @@ EOF
 run_resource_probe() {
     local output_file="$1"
 
+    if [[ "${MACWATCH_TEST_MOCK_RESOURCE_SAMPLES+x}" == "x" ]]; then
+        python3 - "$MACWATCH_TEST_MOCK_RESOURCE_SAMPLES" "$output_file" "$CONFIGURATION" <<'PY'
+import json
+import sys
+
+raw_samples, output_path, configuration = sys.argv[1:]
+samples = []
+for line in raw_samples.splitlines():
+    parts = line.split()
+    if len(parts) < 2:
+        continue
+    try:
+        rss_mb = float(parts[1]) / 1024.0
+        footprint_mb = rss_mb
+        if len(parts) >= 3:
+            raw_memory = parts[2]
+            multiplier = 1.0
+            if raw_memory.endswith("K"):
+                multiplier = 1.0 / 1024.0
+                raw_memory = raw_memory[:-1]
+            elif raw_memory.endswith("M"):
+                raw_memory = raw_memory[:-1]
+            elif raw_memory.endswith("G"):
+                multiplier = 1024.0
+                raw_memory = raw_memory[:-1]
+            footprint_mb = float(raw_memory) * multiplier
+        samples.append((float(parts[0]), rss_mb, footprint_mb))
+    except ValueError:
+        pass
+
+if not samples:
+    payload = {
+        "status": "failed",
+        "reason": "noResourceSamples",
+        "configuration": configuration,
+        "sampleCount": 0,
+    }
+else:
+    avg_cpu = sum(v[0] for v in samples) / len(samples)
+    peak_rss_memory = max(v[1] for v in samples)
+    peak_memory = max(v[2] for v in samples)
+    payload = {
+        "status": "passed" if avg_cpu < 2.0 and peak_memory < 120.0 else "failed",
+        "averageCpuPercent": round(avg_cpu, 2),
+        "configuration": configuration,
+        "memorySource": "physicalFootprint" if any(v[1] != v[2] for v in samples) else "rssFallback",
+        "peakMemoryMB": round(peak_memory, 2),
+        "peakRSSMemoryMB": round(peak_rss_memory, 2),
+        "sampleCount": len(samples),
+    }
+
+with open(output_path, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, sort_keys=True)
+PY
+        return
+    fi
+
     if [[ "${MACWATCH_TEST_MOCK_ACCEPTANCE:-0}" == "1" ]]; then
-        cat > "$output_file" <<'EOF'
-{"status":"passed","averageCpuPercent":0.4,"peakMemoryMB":91.2}
+        cat > "$output_file" <<EOF
+{"status":"passed","averageCpuPercent":0.4,"configuration":"$CONFIGURATION","peakMemoryMB":91.2,"sampleCount":5}
 EOF
         return
     fi
 
-    "$BUNDLE_BINARY" >/tmp/macwatch-stage7-runtime.log 2>/tmp/macwatch-stage7-runtime.err &
+    local warmup_seconds="${MACWATCH_RESOURCE_WARMUP_SECONDS:-8}"
+    local sample_count="${MACWATCH_RESOURCE_SAMPLE_COUNT:-5}"
+    local sample_interval="${MACWATCH_RESOURCE_SAMPLE_INTERVAL_SECONDS:-1}"
+    local steady_duration
+    steady_duration="$(python3 - "$warmup_seconds" "$sample_count" "$sample_interval" <<'PY'
+import sys
+warmup = float(sys.argv[1])
+count = int(sys.argv[2])
+interval = float(sys.argv[3])
+print(warmup + count * interval + 1.0)
+PY
+)"
+
+    local resource_report="$TMP_DIR/resource-steady-state.json"
+    MACWATCH_RESOURCE_STEADY_STATE=1 \
+    MACWATCH_RESOURCE_STEADY_STATE_DURATION_SECONDS="$steady_duration" \
+    "$BUNDLE_BINARY" --acceptance-run resources-steady-state > "$resource_report" 2>/tmp/macwatch-stage7-runtime.err &
     local pid=$!
-    sleep 3
+    sleep "$warmup_seconds"
 
     local samples
-    samples="$(for _ in 1 2 3 4 5; do ps -p "$pid" -o pcpu=,rss=; sleep 1; done)"
-    kill "$pid" >/dev/null 2>&1 || true
-    wait "$pid" 2>/dev/null || true
+    samples="$(
+        for _ in $(seq 1 "$sample_count"); do
+            ps_values="$(ps -p "$pid" -o pcpu=,rss= 2>/dev/null || true)"
+            if [[ -n "$ps_values" ]]; then
+                printf '%s\n' "$ps_values"
+            fi
+            sleep "$sample_interval"
+        done
+    )"
+    local resource_exit=0
+    wait "$pid" 2>/dev/null || resource_exit=$?
 
-    python3 - "$samples" "$output_file" <<'PY'
+    python3 - "$samples" "$output_file" "$CONFIGURATION" "$resource_report" "$resource_exit" <<'PY'
 import json
 import sys
 
 raw_samples = sys.argv[1].splitlines()
+configuration = sys.argv[3]
+report_path = sys.argv[4]
+resource_exit = int(sys.argv[5])
 samples = []
 for line in raw_samples:
     parts = line.split()
     if len(parts) != 2:
         continue
-    samples.append((float(parts[0]), float(parts[1]) / 1024.0))
+    try:
+        samples.append((float(parts[0]), float(parts[1]) / 1024.0))
+    except ValueError:
+        pass
 
-avg_cpu = sum(v[0] for v in samples) / len(samples) if samples else 999.0
-peak_memory = max((v[1] for v in samples), default=999.0)
-status = "passed" if avg_cpu < 2.0 and peak_memory < 120.0 else "failed"
-with open(sys.argv[2], "w", encoding="utf-8") as handle:
-    json.dump({
-        "status": status,
+try:
+    resource_report = json.load(open(report_path))
+except Exception:
+    resource_report = None
+
+if not samples:
+    payload = {
+        "status": "failed",
+        "reason": "noResourceSamples",
+        "configuration": configuration,
+        "sampleCount": 0,
+    }
+elif resource_report is None:
+    payload = {
+        "status": "failed",
+        "reason": "missingResourceReport",
+        "configuration": configuration,
+        "sampleCount": len(samples),
+    }
+else:
+    avg_cpu = sum(v[0] for v in samples) / len(samples)
+    peak_rss_memory = max(v[1] for v in samples)
+    metrics = resource_report.get("metrics", {})
+    peak_memory = float(metrics.get("residentMemoryMB", "999"))
+    failures = list(resource_report.get("failures", []))
+    if resource_exit not in (0, 1):
+        failures.append(f"resourceScenarioExited.{resource_exit}")
+    payload = {
+        "status": "passed" if avg_cpu < 2.0 and peak_memory < 120.0 and not failures else "failed",
         "averageCpuPercent": round(avg_cpu, 2),
+        "configuration": configuration,
+        "failures": failures,
+        "memorySource": metrics.get("memorySource", "appResidentMemory"),
         "peakMemoryMB": round(peak_memory, 2),
-    }, handle, sort_keys=True)
+        "peakRSSMemoryMB": round(peak_rss_memory, 2),
+        "sampleCount": len(samples),
+    }
+with open(sys.argv[2], "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, sort_keys=True)
 PY
 }
 
