@@ -152,6 +152,33 @@ final class MacWatchRuntimeHistoryTests: XCTestCase {
         XCTAssertEqual(series?.samples.count, 1)
         XCTAssertEqual(repository.lastQueryWasOnMainThread, false)
     }
+
+    @MainActor
+    func testRuntimeWritesHistorySamplesOffMainThread() async throws {
+        let baseRepository = InMemorySessionHistoryRepository()
+        let repository = RecordingWriteThreadRepository(base: baseRepository)
+        let sessionID = UUID()
+        try repository.beginSession(
+            MonitoringSession(id: sessionID, startedAt: Date(timeIntervalSince1970: 0)),
+            clearingPreviousHistory: true
+        )
+        let probe = RuntimeHistoryProbe(
+            domain: .cpu,
+            metricName: TemperatureMetricName.cpuHottest,
+            valueCelsius: 61
+        )
+        let runtime = MacWatchRuntime(
+            sessionHistoryRepository: repository,
+            probeProvider: RuntimeHistoryProbeProvider(fastProbes: [probe], slowProbes: []),
+            fastSampleInterval: 0.05,
+            clock: { Date() }
+        )
+
+        runtime.start()
+        try await Task.sleep(nanoseconds: 160_000_000)
+
+        XCTAssertEqual(repository.lastInsertSampleWasOnMainThread, false)
+    }
 }
 
 private struct EmptyRuntimeProbeProvider: MacWatchTemperatureProbeProviding {
@@ -231,5 +258,133 @@ private final class RecordingQueryThreadRepository: SessionHistoryRepository {
 
     func clearCurrentSessionHistory(at clearedAt: Date) throws {
         try base.clearCurrentSessionHistory(at: clearedAt)
+    }
+}
+
+private final class RecordingWriteThreadRepository: SessionHistoryRepository {
+    private let base: SessionHistoryRepository
+    private let lock = NSLock()
+    private var recordedInsertSampleThread: Bool?
+
+    init(base: SessionHistoryRepository) {
+        self.base = base
+    }
+
+    var lastInsertSampleWasOnMainThread: Bool? {
+        lock.withLock { recordedInsertSampleThread }
+    }
+
+    func beginSession(_ session: MonitoringSession, clearingPreviousHistory: Bool) throws {
+        try base.beginSession(session, clearingPreviousHistory: clearingPreviousHistory)
+    }
+
+    func currentSession() throws -> MonitoringSession? {
+        try base.currentSession()
+    }
+
+    func endSession(id: UUID, endedAt: Date) throws {
+        try base.endSession(id: id, endedAt: endedAt)
+    }
+
+    func insertSample(_ sample: TemperatureSample) throws {
+        lock.withLock {
+            recordedInsertSampleThread = Thread.isMainThread
+        }
+        try base.insertSample(sample)
+    }
+
+    func insertCapability(_ capability: TemperatureCapability) throws {
+        try base.insertCapability(capability)
+    }
+
+    func insertTimelineEvent(_ event: TimelineEvent) throws {
+        try base.insertTimelineEvent(event)
+    }
+
+    func updateTimelineEvent(id: UUID, endedAt: Date) throws {
+        try base.updateTimelineEvent(id: id, endedAt: endedAt)
+    }
+
+    func timelineEvents(sessionID: UUID) throws -> [TimelineEvent] {
+        try base.timelineEvents(sessionID: sessionID)
+    }
+
+    func query(_ query: TemperatureQuery) throws -> [TemperatureSeries] {
+        try base.query(query)
+    }
+
+    func query(
+        sessionID: UUID,
+        domain: TemperatureDomain,
+        metricName: String,
+        range: TemperatureHistoryRange,
+        now: Date,
+        maxPoints: Int
+    ) throws -> TemperatureSeries {
+        try base.query(
+            sessionID: sessionID,
+            domain: domain,
+            metricName: metricName,
+            range: range,
+            now: now,
+            maxPoints: maxPoints
+        )
+    }
+
+    func clearCurrentSessionHistory(at clearedAt: Date) throws {
+        try base.clearCurrentSessionHistory(at: clearedAt)
+    }
+}
+
+private struct RuntimeHistoryProbeProvider: MacWatchTemperatureProbeProviding {
+    let fastProbes: [any TemperatureProbe]
+    let slowProbes: [any TemperatureProbe]
+
+    func makeFastProbes() -> [any TemperatureProbe] { fastProbes }
+    func makeSlowProbes() -> [any TemperatureProbe] { slowProbes }
+}
+
+private final class RuntimeHistoryProbe: TemperatureProbe, @unchecked Sendable {
+    let id = UUID().uuidString
+    let domain: TemperatureDomain
+    let source: TemperatureSource = .hidSensors
+    let defaultMetricName: String
+    private let valueCelsius: Double
+
+    init(domain: TemperatureDomain, metricName: String, valueCelsius: Double) {
+        self.domain = domain
+        self.defaultMetricName = metricName
+        self.valueCelsius = valueCelsius
+    }
+
+    func detect(sessionID: UUID, at timestamp: Date) async -> TemperatureCapability {
+        TemperatureCapability(
+            id: UUID(),
+            sessionID: sessionID,
+            domain: domain,
+            source: source,
+            supported: true,
+            readable: true,
+            reasonCode: "ok",
+            reasonMessage: "ok",
+            rawKey: nil,
+            detectedAt: timestamp,
+            updatedAt: timestamp
+        )
+    }
+
+    func read(sessionID: UUID, at timestamp: Date) async -> [TemperatureSample] {
+        [
+            try! TemperatureSample.makeValid(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                metricName: defaultMetricName,
+                domain: domain,
+                deviceID: domain.rawValue,
+                displayName: defaultMetricName,
+                valueCelsius: valueCelsius,
+                source: source
+            )
+        ]
     }
 }

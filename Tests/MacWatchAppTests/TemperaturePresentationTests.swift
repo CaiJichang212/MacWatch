@@ -12,11 +12,11 @@ final class TemperaturePresentationTests: XCTestCase {
     func testTemperatureMetricCatalogIncludesExpectedOverviewMetrics() {
         XCTAssertEqual(
             TemperatureMetricCatalog.overviewMetrics.map(\.domain),
-            [.cpu, .gpu, .memory, .ssd, .battery, .system]
+            [.cpu, .gpu, .memory, .ssd, .battery, .system, .sensor]
         )
         XCTAssertEqual(
             TemperatureMetricCatalog.compatibilityMetrics.map(\.domain),
-            [.cpu, .gpu, .memory, .ssd, .battery, .system]
+            [.cpu, .gpu, .memory, .ssd, .battery, .system, .sensor]
         )
         XCTAssertEqual(TemperatureMetricCatalog.menuBarMetric(for: .hottest), nil)
         XCTAssertEqual(TemperatureMetricCatalog.menuBarMetric(for: .cpu)?.metricName, TemperatureMetricName.cpuHottest)
@@ -96,7 +96,7 @@ final class TemperaturePresentationTests: XCTestCase {
         let snapshot = TemperatureOverviewSnapshot(liveState: state, settings: .default)
 
         XCTAssertEqual(snapshot.hottestValueText, "68°C")
-        XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .memory, .ssd, .battery, .system])
+        XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .memory, .ssd, .battery, .system, .sensor])
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.statusText, "Read failed")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .memory })?.statusText, "Unsupported")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .battery })?.valueText, "32°C")
@@ -153,7 +153,7 @@ final class TemperaturePresentationTests: XCTestCase {
 
         let snapshot = CompatibilitySnapshot(liveState: state)
 
-        XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .memory, .ssd, .battery, .system])
+        XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .memory, .ssd, .battery, .system, .sensor])
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.statusText, "Unsupported")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.reasonText, "unsupported")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .memory })?.statusText, "Read failed")
@@ -257,6 +257,40 @@ final class TemperaturePresentationTests: XCTestCase {
         XCTAssertEqual(title.text, "72°C")
         XCTAssertEqual(title.statusSuffix, "stale")
         XCTAssertEqual(title.isStale, true)
+    }
+
+    func testTemperatureFormatterFallsBackToRawAttributeKeysWhenRawKeyMissing() {
+        let sessionID = UUID()
+        let timestamp = Date(timeIntervalSince1970: 1000)
+        let sample = try! TemperatureSample.makeInvalid(
+            sessionID: sessionID,
+            timestamp: timestamp,
+            metricName: TemperatureMetricName.systemHottest,
+            domain: .system,
+            deviceID: "system",
+            displayName: "System Hottest",
+            quality: .readFailed,
+            source: .smc,
+            errorCode: "readFailed",
+            attributes: ["rawKeys": "A, B, C"]
+        )
+
+        let row = TemperatureOverviewSnapshot.Row(
+            domain: .system,
+            metricName: TemperatureMetricName.systemHottest,
+            title: "System",
+            valueText: TemperatureFormatter.placeholder(unit: .celsius),
+            statusText: TemperatureFormatter.statusText(sample: sample, capability: nil),
+            sourceText: TemperatureFormatter.sourceText(sample: sample, capability: nil),
+            reasonText: TemperatureFormatter.reasonText(sample: sample, capability: nil),
+            updatedAt: timestamp,
+            rawKey: TemperatureFormatter.rawKeyText(sample: sample, capability: nil),
+            isStale: false
+        )
+
+        XCTAssertEqual(row.rawKey, "A, B, C")
+        XCTAssertEqual(row.reasonText, "readFailed")
+        XCTAssertEqual(row.statusText, "Read failed")
     }
 
     func testDetailSnapshotFormatsStatisticsAndDoesNotFabricateZeroValues() throws {

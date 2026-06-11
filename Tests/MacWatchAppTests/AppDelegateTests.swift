@@ -11,7 +11,8 @@ final class AppDelegateTests: XCTestCase {
             sessionHistoryRepository: repository,
             shouldSetupMenuBarOnLaunch: false,
             shouldRegisterObserversOnLaunch: false,
-            shouldStartRuntimeOnLaunch: false
+            shouldStartRuntimeOnLaunch: false,
+            shouldOpenMainWindowOnLaunch: false
         )
 
         appDelegate.applicationDidFinishLaunching(

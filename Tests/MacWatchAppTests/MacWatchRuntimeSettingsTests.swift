@@ -38,6 +38,39 @@ final class MacWatchRuntimeSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testCompletingFirstRunGuidePersistsSelectedBaselineSettings() {
+        let suiteName = "MacWatchRuntimeSettingsTests.firstRun.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let store = InMemorySettingsStore(initialSettings: .default)
+        let guideStore = FirstRunGuideStateStore(defaults: defaults)
+        let runtime = MacWatchRuntime(
+            sessionHistoryRepository: InMemorySessionHistoryRepository(),
+            settingsStore: store,
+            probeProvider: EmptyRuntimeProbeProvider(),
+            forceShowFirstRunGuide: true,
+            firstRunGuideStateStore: guideStore
+        )
+
+        runtime.completeFirstRunGuide(
+            configuration: FirstRunGuideConfiguration(
+                temperatureUnit: .fahrenheit,
+                menuBarDisplayMetric: .battery,
+                refreshInterval: .tenSeconds
+            )
+        )
+
+        XCTAssertFalse(runtime.shouldShowFirstRunGuide)
+        XCTAssertFalse(guideStore.shouldShowFirstRunGuide())
+        XCTAssertEqual(runtime.settings.temperatureUnit, .fahrenheit)
+        XCTAssertEqual(runtime.settings.menuBarDisplayMetric, .battery)
+        XCTAssertEqual(runtime.settings.refreshInterval, .tenSeconds)
+        XCTAssertEqual(store.savedSettings?.temperatureUnit, .fahrenheit)
+        XCTAssertEqual(store.savedSettings?.menuBarDisplayMetric, .battery)
+        XCTAssertEqual(store.savedSettings?.refreshInterval, .tenSeconds)
+    }
+
+    @MainActor
     func testEffectiveRealtimeIntervalClampsSlowDomains() {
         let runtime = MacWatchRuntime(
             sessionHistoryRepository: InMemorySessionHistoryRepository(),

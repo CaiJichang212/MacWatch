@@ -4,7 +4,7 @@ import XCTest
 @testable import StatsAdapter
 
 final class DomainTemperatureProbeTests: XCTestCase {
-    func testGPUProbePrefersHIDThenFallsBackToIOAccelerator() async {
+    func testGPUProbePrefersHIDButDoesNotPromoteIOAcceleratorCandidateToValidTemperature() async {
         let sessionID = UUID()
         let timestamp = Date(timeIntervalSince1970: 50)
         let hidProbe = GPUTemperatureProbe(
@@ -29,8 +29,10 @@ final class DomainTemperatureProbeTests: XCTestCase {
         )
 
         let ioSamples = await ioProbe.read(sessionID: sessionID, at: timestamp)
-        XCTAssertEqual(ioSamples.first?.source, .ioReportCandidate)
-        XCTAssertEqual(ioSamples.first?.valueCelsius, 46.5)
+        XCTAssertEqual(ioSamples.first?.quality, .readFailed)
+        XCTAssertNil(ioSamples.first?.valueCelsius)
+        XCTAssertNotEqual(ioSamples.first?.source, .ioReportCandidate)
+        XCTAssertEqual(ioSamples.first?.attributes["candidateSourceDisabled"], "IOAccelerator Temperature(C)")
     }
 
     func testMemoryProbeReadsSMCProximityTemperature() async {
@@ -135,7 +137,7 @@ final class DomainTemperatureProbeTests: XCTestCase {
         let ssdSample = await ssdProbe.read(sessionID: sessionID, at: timestamp).first
         let batterySample = await batteryProbe.read(sessionID: sessionID, at: timestamp).first
 
-        XCTAssertEqual(gpuSample?.attributes["sourcePriority"], "HID Sensors,SMC,IOReport Candidate")
+        XCTAssertEqual(gpuSample?.attributes["sourcePriority"], "HID Sensors,SMC")
         XCTAssertNotNil(gpuSample?.attributes["attemptedRawKeys"])
         XCTAssertEqual(memorySample?.attributes["sourcePriority"], "SMC")
         XCTAssertEqual(memorySample?.attributes["attemptedRawKeys"], "Tm0p,Tm1p,Tm2p")
@@ -145,7 +147,7 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(batterySample?.attributes["ioRegistryProperty"], "Temperature")
     }
 
-    func testDetectMarksSupportedButUnreadableWhenDomainProbeCannotReadCurrentValue() async {
+    func testDetectMarksSupportedButUnreadableWithSpecificReasonWhenDomainProbeCannotReadCurrentValue() async {
         let sessionID = UUID()
         let timestamp = Date(timeIntervalSince1970: 96)
         let batteryProbe = BatteryTemperatureProbe(
@@ -159,7 +161,36 @@ final class DomainTemperatureProbeTests: XCTestCase {
 
         XCTAssertTrue(capability.supported)
         XCTAssertFalse(capability.readable)
-        XCTAssertEqual(capability.reasonCode, "readFailed")
+        XCTAssertEqual(capability.reasonCode, "noReadableTemperature")
+        XCTAssertEqual(capability.reasonMessage, "No readable battery temperature from Battery IORegistry, HID Sensors, or SMC.")
+    }
+
+    func testUnavailableDomainCapabilitiesExposeSpecificNoReadableTemperatureReason() async {
+        let sessionID = UUID()
+        let timestamp = Date(timeIntervalSince1970: 97)
+        let memoryProbe = MemoryTemperatureProbe(
+            platformDetector: FakeGPUPlatformDetector(platform: .m4),
+            smcReader: FakeGPUSMCReader(values: [:]),
+            catalog: AppleSiliconSensorCatalog()
+        )
+        let ssdProbe = SSDTemperatureProbe(
+            nvmeReader: FakeNVMeReader(reading: nil),
+            hidReader: FakeGPUHIDReader(values: [:]),
+            smcReader: FakeGPUSMCReader(values: [:]),
+            catalog: AppleSiliconSensorCatalog()
+        )
+
+        let memory = await memoryProbe.detect(sessionID: sessionID, at: timestamp)
+        let ssd = await ssdProbe.detect(sessionID: sessionID, at: timestamp)
+
+        XCTAssertTrue(memory.supported)
+        XCTAssertFalse(memory.readable)
+        XCTAssertEqual(memory.reasonCode, "noReadableTemperature")
+        XCTAssertEqual(memory.reasonMessage, "No readable memory temperature from SMC.")
+        XCTAssertTrue(ssd.supported)
+        XCTAssertFalse(ssd.readable)
+        XCTAssertEqual(ssd.reasonCode, "noReadableTemperature")
+        XCTAssertEqual(ssd.reasonMessage, "No readable internal SSD temperature from NVMe SMART, HID Sensors, or SMC.")
     }
 }
 
