@@ -120,16 +120,34 @@ EOF
 
     "$BUNDLE_BINARY" >/tmp/macwatch-stage7-network.log 2>/tmp/macwatch-stage7-network.err &
     local pid=$!
-    sleep 3
+    local max_socket_count=0
+    local socket_snapshot=""
+    local has_socket=0
+    local deadline=$((SECONDS + 8))
 
-    local sockets
-    sockets="$(lsof -p "$pid" | grep -E ' (TCP|UDP) ' || true)"
+    while [[ "$SECONDS" -lt "$deadline" ]]; do
+        local sockets=""
+        sockets="$(lsof -a -p "$pid" -n -P -i TCP -i UDP 2>/dev/null | sed -n '2,$p' || true)"
+        if [[ -n "$sockets" ]]; then
+            has_socket=1
+            socket_snapshot="$socket_snapshot\n$sockets"
+        fi
+
+        local current_count=0
+        current_count="$(awk 'NF{count += 1} END{print count+0}' <<<"$sockets")"
+        if [[ "$current_count" -gt "$max_socket_count" ]]; then
+            max_socket_count="$current_count"
+        fi
+
+        sleep 1
+    done
+
     kill "$pid" >/dev/null 2>&1 || true
     wait "$pid" 2>/dev/null || true
 
-    if [[ -n "$sockets" ]]; then
+    if [[ "$has_socket" -eq 1 ]]; then
         cat > "$output_file" <<EOF
-{"status":"failed","socketCount":1,"evidence":"externalSocketDetected"}
+{"status":"failed","socketCount":$max_socket_count,"evidence":"socketFoundDuringRun"}
 EOF
     else
         cat > "$output_file" <<'EOF'
@@ -174,6 +192,30 @@ import json, sys
 print("passed" if json.load(open(sys.argv[1]))["passed"] else "failed")
 PY
 )" "$popup_output" "$TMP_DIR/result-popup-open.json"
+
+first_run_output="$TMP_DIR/first-run-guide.json"
+run_acceptance_report "first-run-guide" "$first_run_output"
+write_result "first-run-guide" "$(python3 - "$first_run_output" <<'PY'
+import json, sys
+print("passed" if json.load(open(sys.argv[1]))["passed"] else "failed")
+PY
+)" "$first_run_output" "$TMP_DIR/result-first-run-guide.json"
+
+launch_enabled_output="$TMP_DIR/launch-main-window-on-start-enabled.json"
+run_acceptance_report "launch-main-window-on-start-enabled" "$launch_enabled_output"
+write_result "launch-main-window-on-start-enabled" "$(python3 - "$launch_enabled_output" <<'PY'
+import json, sys
+print("passed" if json.load(open(sys.argv[1]))["passed"] else "failed")
+PY
+)" "$launch_enabled_output" "$TMP_DIR/result-launch-main-window-on-start-enabled.json"
+
+launch_disabled_output="$TMP_DIR/launch-main-window-on-start-disabled.json"
+run_acceptance_report "launch-main-window-on-start-disabled" "$launch_disabled_output"
+write_result "launch-main-window-on-start-disabled" "$(python3 - "$launch_disabled_output" <<'PY'
+import json, sys
+print("passed" if json.load(open(sys.argv[1]))["passed"] else "failed")
+PY
+)" "$launch_disabled_output" "$TMP_DIR/result-launch-main-window-on-start-disabled.json"
 
 trend_output="$TMP_DIR/trend-query.json"
 run_acceptance_report "trend-query" "$trend_output"
