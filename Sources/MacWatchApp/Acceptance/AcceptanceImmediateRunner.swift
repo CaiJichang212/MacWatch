@@ -11,7 +11,8 @@ enum AcceptanceImmediateRunner {
             return runTrendQuerySynchronously()
         case .sleepWakeSimulated:
             return runSleepWakeSynchronously()
-        case .dashboardOpen, .popupOpen:
+        case .dashboardOpen, .popupOpen, .firstRunGuide,
+             .launchMainWindowOnStartEnabled, .launchMainWindowOnStartDisabled:
             let startedAt = Date()
             return AcceptanceReport(
                 scenario: scenario,
@@ -47,6 +48,8 @@ enum AcceptanceImmediateRunner {
             TemperatureDomain.memory.rawValue,
             TemperatureDomain.ssd.rawValue,
             TemperatureDomain.battery.rawValue,
+            TemperatureDomain.system.rawValue,
+            TemperatureDomain.sensor.rawValue,
         ]
 
         var metrics: [String: String] = [:]

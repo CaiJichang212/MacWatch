@@ -6,13 +6,28 @@ enum AcceptanceScenario: String, CaseIterable, Codable {
     case popupOpen = "popup-open"
     case trendQuery = "trend-query"
     case sleepWakeSimulated = "sleep-wake-simulated"
+    case firstRunGuide = "first-run-guide"
+    case launchMainWindowOnStartEnabled = "launch-main-window-on-start-enabled"
+    case launchMainWindowOnStartDisabled = "launch-main-window-on-start-disabled"
 
     var requiresApplicationLaunch: Bool {
         switch self {
-        case .dashboardOpen, .popupOpen:
+        case .dashboardOpen, .popupOpen, .firstRunGuide,
+             .launchMainWindowOnStartEnabled, .launchMainWindowOnStartDisabled:
             return true
         case .probeStatus, .trendQuery, .sleepWakeSimulated:
             return false
+        }
+    }
+
+    var expectsMainWindowToOpenOnStart: Bool? {
+        switch self {
+        case .launchMainWindowOnStartEnabled:
+            return true
+        case .launchMainWindowOnStartDisabled:
+            return false
+        default:
+            return nil
         }
     }
 }
@@ -20,6 +35,7 @@ enum AcceptanceScenario: String, CaseIterable, Codable {
 enum AcceptanceView: String {
     case dashboard
     case popup
+    case firstRunGuide
 }
 
 enum MacWatchCLIArgumentError: Error, LocalizedError {
