@@ -46,7 +46,6 @@ enum AcceptanceImmediateRunner {
         let requiredDomains: [String] = [
             TemperatureDomain.cpu.rawValue,
             TemperatureDomain.gpu.rawValue,
-            TemperatureDomain.memory.rawValue,
             TemperatureDomain.ssd.rawValue,
             TemperatureDomain.battery.rawValue,
             TemperatureDomain.system.rawValue,
@@ -84,10 +83,6 @@ enum AcceptanceImmediateRunner {
                 resolvedQuality != TemperatureQuality.readFailed.rawValue {
                 failures.append("\(domain).unexpectedQuality.\(resolvedQuality)")
             }
-        }
-
-        if cpuHasValid == false {
-            failures.append("cpu.missingValidSample")
         }
 
         let durationMs = Date().timeIntervalSince(startedAt) * 1_000

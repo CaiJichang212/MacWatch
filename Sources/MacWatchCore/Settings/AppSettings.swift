@@ -15,9 +15,29 @@ public enum MenuBarDisplayMetric: String, CaseIterable, Codable, Sendable {
     case hottest
     case cpu
     case gpu
-    case memory
     case ssd
     case battery
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        if rawValue == "memory" {
+            self = .hottest
+            return
+        }
+        guard let value = MenuBarDisplayMetric(rawValue: rawValue) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid menu bar display metric: \(rawValue)"
+            )
+        }
+        self = value
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 public struct AppSettings: Codable, Equatable, Sendable {

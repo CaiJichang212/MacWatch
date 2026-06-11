@@ -7,6 +7,7 @@ struct MenuBarPopupRowModel: Identifiable, Equatable {
     let sourceText: String
     let updatedAtText: String
     let valueText: String
+    let averageValueText: String?
     let statusText: String
     let isPrimaryValue: Bool
 
@@ -16,6 +17,7 @@ struct MenuBarPopupRowModel: Identifiable, Equatable {
         sourceText = "Source: \(row.sourceText)"
         updatedAtText = "Updated: \(row.updatedAtText)"
         valueText = row.valueText
+        averageValueText = row.averageValueText
         statusText = row.statusText
         isPrimaryValue = row.statusText == "Valid"
     }
@@ -62,6 +64,11 @@ struct MenuBarPopupView: View {
                         Text(row.valueText)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(row.isPrimaryValue ? .primary : .secondary)
+                        if let averageValueText = row.averageValueText {
+                            Text("Avg \(averageValueText)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         Text(row.statusText)
                             .font(.caption)
                             .foregroundStyle(.secondary)

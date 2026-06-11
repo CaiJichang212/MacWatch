@@ -373,7 +373,7 @@ final class MacWatchRuntime: ObservableObject {
         }
 
         switch domain {
-        case .memory, .ssd, .battery:
+        case .ssd, .battery:
             return slowSampleIntervalOverride ?? max(settings.refreshInterval.rawValue, RefreshInterval.thirtySeconds.rawValue)
         case .system, .sensor:
             return slowSampleIntervalOverride ?? max(settings.refreshInterval.rawValue, RefreshInterval.tenSeconds.rawValue)
