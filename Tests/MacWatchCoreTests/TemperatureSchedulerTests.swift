@@ -109,12 +109,6 @@ final class TemperatureSchedulerTests: XCTestCase {
             source: .smc,
             defaultMetricName: TemperatureMetricName.gpuHottest
         )
-        let memoryProbe = ManualTickProbe(
-            id: "memory-primary",
-            domain: .memory,
-            source: .smc,
-            defaultMetricName: TemperatureMetricName.memoryProximity
-        )
         let ssdProbe = ManualTickProbe(
             id: "ssd-primary",
             domain: .ssd,
@@ -143,7 +137,6 @@ final class TemperatureSchedulerTests: XCTestCase {
         let probes: [any TemperatureProbe] = [
             cpuProbe,
             gpuProbe,
-            memoryProbe,
             ssdProbe,
             batteryProbe,
             systemProbe,
@@ -176,8 +169,6 @@ final class TemperatureSchedulerTests: XCTestCase {
                     return TemperatureSamplingPolicy.default(for: .cpu, userRealtimeInterval: 5)
                 case .gpu:
                     return TemperatureSamplingPolicy.default(for: .gpu, userRealtimeInterval: 5)
-                case .memory:
-                    return TemperatureSamplingPolicy.default(for: .memory)
                 case .ssd:
                     return TemperatureSamplingPolicy.default(for: .ssd, userRealtimeInterval: 5)
                 case .battery:
@@ -201,7 +192,6 @@ final class TemperatureSchedulerTests: XCTestCase {
         let events = await collector.snapshot()
         let cpuContexts = events.sampleContextsByProbeID["cpu-primary"] ?? []
         let gpuContexts = events.sampleContextsByProbeID["gpu-primary"] ?? []
-        let memoryContexts = events.sampleContextsByProbeID["memory-primary"] ?? []
         let ssdContexts = events.sampleContextsByProbeID["ssd-primary"] ?? []
         let batteryContexts = events.sampleContextsByProbeID["battery-primary"] ?? []
         let systemContexts = events.sampleContextsByProbeID["system-primary"] ?? []
@@ -209,7 +199,6 @@ final class TemperatureSchedulerTests: XCTestCase {
 
         XCTAssertEqual(cpuContexts.count, 5)
         XCTAssertEqual(gpuContexts.count, 5)
-        XCTAssertEqual(memoryContexts.count, 1)
         XCTAssertEqual(ssdContexts.count, 1)
         XCTAssertEqual(batteryContexts.count, 1)
         XCTAssertEqual(systemContexts.count, 3)
@@ -217,7 +206,6 @@ final class TemperatureSchedulerTests: XCTestCase {
 
         XCTAssertEqual(cpuContexts.filter(\.shouldWriteHistory).count, 3)
         XCTAssertEqual(gpuContexts.filter(\.shouldWriteHistory).count, 3)
-        XCTAssertEqual(memoryContexts.filter(\.shouldWriteHistory).count, 1)
         XCTAssertEqual(ssdContexts.filter(\.shouldWriteHistory).count, 1)
         XCTAssertEqual(batteryContexts.filter(\.shouldWriteHistory).count, 1)
         XCTAssertEqual(systemContexts.filter(\.shouldWriteHistory).count, 1)
@@ -225,7 +213,6 @@ final class TemperatureSchedulerTests: XCTestCase {
 
         XCTAssertEqual(cpuProbe.readCount, 5)
         XCTAssertEqual(gpuProbe.readCount, 5)
-        XCTAssertEqual(memoryProbe.readCount, 1)
         XCTAssertEqual(ssdProbe.readCount, 1)
         XCTAssertEqual(batteryProbe.readCount, 1)
         XCTAssertEqual(systemProbe.readCount, 3)

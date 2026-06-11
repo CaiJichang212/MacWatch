@@ -6,7 +6,6 @@ final class TemperatureModelTests: XCTestCase {
         XCTAssertEqual(TemperatureDomain.allCases.map(\.rawValue), [
             "cpu",
             "gpu",
-            "memory",
             "ssd",
             "battery",
             "system",

@@ -79,19 +79,35 @@ final class MacWatchRuntimeSettingsTests: XCTestCase {
         )
 
         XCTAssertEqual(runtime.effectiveRealtimeInterval(for: .cpu), 5)
-        XCTAssertEqual(runtime.effectiveRealtimeInterval(for: .memory), 30)
+        XCTAssertEqual(runtime.effectiveRealtimeInterval(for: .ssd), 30)
 
         runtime.applyRefreshInterval(.tenSeconds)
 
         XCTAssertEqual(runtime.effectiveRealtimeInterval(for: .cpu), 10)
         XCTAssertEqual(runtime.effectiveRealtimeInterval(for: .gpu), 10)
-        XCTAssertEqual(runtime.effectiveRealtimeInterval(for: .memory), 30)
+        XCTAssertEqual(runtime.effectiveRealtimeInterval(for: .ssd), 30)
         XCTAssertEqual(runtime.effectiveRealtimeInterval(for: .battery), 30)
 
         runtime.applyRefreshInterval(.thirtySeconds)
 
         XCTAssertEqual(runtime.effectiveRealtimeInterval(for: .cpu), 30)
-        XCTAssertEqual(runtime.effectiveRealtimeInterval(for: .memory), 30)
+        XCTAssertEqual(runtime.effectiveRealtimeInterval(for: .ssd), 30)
+    }
+
+    func testLegacyMemoryMenuBarMetricMigratesToHottest() throws {
+        let data = """
+        {
+          "launchMainWindowOnStart": true,
+          "temperatureUnit": "celsius",
+          "refreshInterval": 5,
+          "defaultTrendRange": "oneHour",
+          "menuBarDisplayMetric": "memory"
+        }
+        """.data(using: .utf8)!
+
+        let settings = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        XCTAssertEqual(settings.menuBarDisplayMetric, .hottest)
     }
 
     @MainActor

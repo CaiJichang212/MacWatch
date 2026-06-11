@@ -16,9 +16,13 @@ final class DomainTemperatureProbeTests: XCTestCase {
         )
 
         let hidSamples = await hidProbe.read(sessionID: sessionID, at: timestamp)
-        XCTAssertEqual(hidSamples.first?.metricName, TemperatureMetricName.gpuHottest)
+        XCTAssertEqual(hidSamples.map(\.metricName), [
+            TemperatureMetricName.gpuHottest,
+            TemperatureMetricName.gpuAverage,
+        ])
         XCTAssertEqual(hidSamples.first?.source, .hidSensors)
         XCTAssertEqual(hidSamples.first?.rawKey, "GPU MTR Temp Sensor0")
+        XCTAssertEqual(hidSamples.last?.valueCelsius, 57.0)
 
         let ioProbe = GPUTemperatureProbe(
             platformDetector: FakeGPUPlatformDetector(platform: .m4),
@@ -35,19 +39,29 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(ioSamples.first?.attributes["candidateSourceDisabled"], "IOAccelerator Temperature(C)")
     }
 
-    func testMemoryProbeReadsSMCProximityTemperature() async {
-        let probe = MemoryTemperatureProbe(
+    func testGPUProbeComputesAverageAcrossStatsRecognizedSensors() async {
+        let probe = GPUTemperatureProbe(
             platformDetector: FakeGPUPlatformDetector(platform: .m4),
-            smcReader: FakeGPUSMCReader(values: ["Tm0p": 42.0, "Tm1p": 45.0]),
+            hidReader: FakeGPUHIDReader(values: [
+                "GPU MTR Temp Sensor0": 57.0,
+                "GPU MTR Temp Sensor1": 51.0,
+                "PMU tdie8": 80.0,
+            ]),
+            smcReader: FakeGPUSMCReader(values: [:]),
+            ioAcceleratorReader: FakeIOAcceleratorReader(reading: nil),
             catalog: AppleSiliconSensorCatalog()
         )
 
-        let samples = await probe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 60))
+        let samples = await probe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 55))
 
-        XCTAssertEqual(samples.count, 1)
-        XCTAssertEqual(samples.first?.metricName, TemperatureMetricName.memoryProximity)
-        XCTAssertEqual(samples.first?.valueCelsius, 45.0)
-        XCTAssertEqual(samples.first?.rawKey, "Tm1p")
+        XCTAssertEqual(samples.map(\.metricName), [
+            TemperatureMetricName.gpuHottest,
+            TemperatureMetricName.gpuAverage,
+        ])
+        XCTAssertEqual(samples[0].valueCelsius, 57.0)
+        XCTAssertEqual(samples[1].valueCelsius, 54.0)
+        XCTAssertEqual(samples[0].attributes["rawKeys"], "GPU MTR Temp Sensor0,GPU MTR Temp Sensor1")
+        XCTAssertEqual(samples[1].attributes["rawKeys"], "GPU MTR Temp Sensor0,GPU MTR Temp Sensor1")
     }
 
     func testSSDProbeUsesNVMeSMARTWhenAvailable() async {
@@ -89,19 +103,11 @@ final class DomainTemperatureProbeTests: XCTestCase {
             smcReader: FakeGPUSMCReader(values: [:]),
             catalog: AppleSiliconSensorCatalog()
         )
-        let memoryProbe = MemoryTemperatureProbe(
-            platformDetector: FakeGPUPlatformDetector(platform: .m4),
-            smcReader: FakeGPUSMCReader(values: [:]),
-            catalog: AppleSiliconSensorCatalog()
-        )
 
         let batterySamples = await batteryProbe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 90))
-        let memorySamples = await memoryProbe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 90))
 
         XCTAssertEqual(batterySamples.first?.quality, .readFailed)
-        XCTAssertEqual(memorySamples.first?.quality, .readFailed)
         XCTAssertEqual(batterySamples.first?.metricName, TemperatureMetricName.battery)
-        XCTAssertEqual(memorySamples.first?.metricName, TemperatureMetricName.memoryProximity)
     }
 
     func testUnavailableSamplesCarrySourceSpecificAttributes() async {
@@ -112,11 +118,6 @@ final class DomainTemperatureProbeTests: XCTestCase {
             hidReader: FakeGPUHIDReader(values: [:]),
             smcReader: FakeGPUSMCReader(values: [:]),
             ioAcceleratorReader: FakeIOAcceleratorReader(reading: nil),
-            catalog: AppleSiliconSensorCatalog()
-        )
-        let memoryProbe = MemoryTemperatureProbe(
-            platformDetector: FakeGPUPlatformDetector(platform: .m4),
-            smcReader: FakeGPUSMCReader(values: [:]),
             catalog: AppleSiliconSensorCatalog()
         )
         let ssdProbe = SSDTemperatureProbe(
@@ -133,14 +134,11 @@ final class DomainTemperatureProbeTests: XCTestCase {
         )
 
         let gpuSample = await gpuProbe.read(sessionID: sessionID, at: timestamp).first
-        let memorySample = await memoryProbe.read(sessionID: sessionID, at: timestamp).first
         let ssdSample = await ssdProbe.read(sessionID: sessionID, at: timestamp).first
         let batterySample = await batteryProbe.read(sessionID: sessionID, at: timestamp).first
 
         XCTAssertEqual(gpuSample?.attributes["sourcePriority"], "HID Sensors,SMC")
         XCTAssertNotNil(gpuSample?.attributes["attemptedRawKeys"])
-        XCTAssertEqual(memorySample?.attributes["sourcePriority"], "SMC")
-        XCTAssertEqual(memorySample?.attributes["attemptedRawKeys"], "Tm0p,Tm1p,Tm2p")
         XCTAssertEqual(ssdSample?.attributes["sourcePriority"], "NVMe SMART,HID Sensors,SMC")
         XCTAssertEqual(ssdSample?.attributes["smartField"], "temperature")
         XCTAssertEqual(batterySample?.attributes["sourcePriority"], "Battery IORegistry,HID Sensors,SMC")
@@ -183,11 +181,6 @@ final class DomainTemperatureProbeTests: XCTestCase {
     func testUnavailableDomainCapabilitiesExposeSpecificNoReadableTemperatureReason() async {
         let sessionID = UUID()
         let timestamp = Date(timeIntervalSince1970: 97)
-        let memoryProbe = MemoryTemperatureProbe(
-            platformDetector: FakeGPUPlatformDetector(platform: .m4),
-            smcReader: FakeGPUSMCReader(values: [:]),
-            catalog: AppleSiliconSensorCatalog()
-        )
         let ssdProbe = SSDTemperatureProbe(
             nvmeReader: FakeNVMeReader(reading: nil),
             hidReader: FakeGPUHIDReader(values: [:]),
@@ -195,13 +188,8 @@ final class DomainTemperatureProbeTests: XCTestCase {
             catalog: AppleSiliconSensorCatalog()
         )
 
-        let memory = await memoryProbe.detect(sessionID: sessionID, at: timestamp)
         let ssd = await ssdProbe.detect(sessionID: sessionID, at: timestamp)
 
-        XCTAssertTrue(memory.supported)
-        XCTAssertFalse(memory.readable)
-        XCTAssertEqual(memory.reasonCode, "noReadableTemperature")
-        XCTAssertEqual(memory.reasonMessage, "No readable memory temperature from SMC.")
         XCTAssertTrue(ssd.supported)
         XCTAssertFalse(ssd.readable)
         XCTAssertEqual(ssd.reasonCode, "noReadableTemperature")
@@ -223,19 +211,6 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(capability.reasonCode, "internalSMARTDiskUnavailable")
     }
 
-    func testMemoryCapabilityMarksUnsupportedWhenPlatformCannotBeDetected() async {
-        let probe = MemoryTemperatureProbe(
-            platformDetector: FakeGPUPlatformDetector(platform: nil),
-            smcReader: FakeGPUSMCReader(values: [:]),
-            catalog: AppleSiliconSensorCatalog()
-        )
-
-        let capability = await probe.detect(sessionID: UUID(), at: Date(timeIntervalSince1970: 99))
-
-        XCTAssertFalse(capability.supported)
-        XCTAssertFalse(capability.readable)
-        XCTAssertEqual(capability.reasonCode, "platformUnsupported")
-    }
 }
 
 private struct FakeGPUPlatformDetector: ApplePlatformDetecting {

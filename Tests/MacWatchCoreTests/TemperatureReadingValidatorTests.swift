@@ -22,10 +22,6 @@ final class TemperatureReadingValidatorTests: XCTestCase {
             TemperatureSamplingPolicy(realtimeInterval: 5, historyInterval: 10, minimumInterval: 5)
         )
         XCTAssertEqual(
-            TemperatureSamplingPolicy.default(for: .memory),
-            TemperatureSamplingPolicy(realtimeInterval: 30, historyInterval: 60, minimumInterval: 30)
-        )
-        XCTAssertEqual(
             TemperatureSamplingPolicy.default(for: .ssd),
             TemperatureSamplingPolicy(realtimeInterval: 30, historyInterval: 60, minimumInterval: 30)
         )
@@ -50,7 +46,7 @@ final class TemperatureReadingValidatorTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            TemperatureSamplingPolicy.default(for: .memory, userRealtimeInterval: 45),
+            TemperatureSamplingPolicy.default(for: .ssd, userRealtimeInterval: 45),
             TemperatureSamplingPolicy(realtimeInterval: 45, historyInterval: 90, minimumInterval: 30)
         )
     }

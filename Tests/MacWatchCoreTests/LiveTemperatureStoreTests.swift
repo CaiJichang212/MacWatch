@@ -89,6 +89,38 @@ final class LiveTemperatureStoreTests: XCTestCase {
         XCTAssertEqual(laterState.lastValidSamplesByMetricName[TemperatureMetricName.cpuHottest]?.metricName, TemperatureMetricName.cpuHottest)
     }
 
+    func testAverageSamplesDoNotParticipateInGlobalHottestTemperature() async {
+        let store = LiveTemperatureStore(policyForDomain: { _ in
+            TemperatureSamplingPolicy(realtimeInterval: 5, historyInterval: 10, minimumInterval: 5)
+        })
+        let baseTime = Date(timeIntervalSince1970: 25)
+
+        let state = await store.apply(
+            .samples(
+                [
+                    sample(
+                        metricName: TemperatureMetricName.cpuHottest,
+                        domain: .cpu,
+                        value: 62,
+                        source: .hidSensors,
+                        at: baseTime
+                    ),
+                    sample(
+                        metricName: TemperatureMetricName.gpuAverage,
+                        domain: .gpu,
+                        value: 90,
+                        source: .hidSensors,
+                        at: baseTime
+                    ),
+                ],
+                context: context(at: baseTime)
+            )
+        )
+
+        XCTAssertEqual(state.hottestValidSample?.metricName, TemperatureMetricName.cpuHottest)
+        XCTAssertEqual(state.hottestValidSample?.valueCelsius, 62)
+    }
+
     func testMarkStaleAfterThresholdKeepsLastValidReferenceAndClearsCurrentHottest() async {
         let store = LiveTemperatureStore(policyForDomain: { _ in
             TemperatureSamplingPolicy(realtimeInterval: 5, historyInterval: 10, minimumInterval: 5)

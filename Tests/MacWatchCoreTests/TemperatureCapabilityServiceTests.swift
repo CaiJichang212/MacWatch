@@ -33,18 +33,6 @@ final class TemperatureCapabilityServiceTests: XCTestCase {
                     )
                 ),
                 StubTemperatureProbe(
-                    domain: .memory,
-                    source: .smc,
-                    capability: makeCapability(
-                        sessionID: UUID(),
-                        domain: .memory,
-                        source: .smc,
-                        supported: true,
-                        readable: false,
-                        reasonCode: ""
-                    )
-                ),
-                StubTemperatureProbe(
                     domain: .ssd,
                     source: .nvmeSMART,
                     capability: makeCapability(
@@ -80,9 +68,6 @@ final class TemperatureCapabilityServiceTests: XCTestCase {
         XCTAssertEqual(capabilities[.gpu]?.supported, false)
         XCTAssertEqual(capabilities[.gpu]?.readable, false)
         XCTAssertEqual(capabilities[.gpu]?.reasonCode, "unsupported")
-        XCTAssertEqual(capabilities[.memory]?.supported, true)
-        XCTAssertEqual(capabilities[.memory]?.readable, false)
-        XCTAssertEqual(capabilities[.memory]?.reasonCode, "readFailed")
         XCTAssertEqual(capabilities[.system]?.supported, false)
         XCTAssertEqual(capabilities[.system]?.readable, false)
         XCTAssertEqual(capabilities[.system]?.reasonCode, "unsupported")
@@ -91,7 +76,7 @@ final class TemperatureCapabilityServiceTests: XCTestCase {
         XCTAssertEqual(capabilities[.sensor]?.readable, false)
         XCTAssertEqual(capabilities[.sensor]?.reasonCode, "unsupported")
         XCTAssertEqual(capabilities[.sensor]?.source, .hidSensors)
-        XCTAssertEqual(repository.capabilities.count, 5)
+        XCTAssertEqual(repository.capabilities.count, 4)
         XCTAssertEqual(repository.timelineEvents.filter { $0.eventType == .historyWriteFailed }.count, 0)
     }
 
@@ -296,8 +281,6 @@ private func metricName(for domain: TemperatureDomain) -> String {
         return TemperatureMetricName.cpuHottest
     case .gpu:
         return TemperatureMetricName.gpuHottest
-    case .memory:
-        return TemperatureMetricName.memoryProximity
     case .ssd:
         return TemperatureMetricName.ssdInternal
     case .battery:

@@ -12,14 +12,16 @@ final class TemperaturePresentationTests: XCTestCase {
     func testTemperatureMetricCatalogIncludesExpectedOverviewMetrics() {
         XCTAssertEqual(
             TemperatureMetricCatalog.overviewMetrics.map(\.domain),
-            [.cpu, .gpu, .memory, .ssd, .battery, .system, .sensor]
+            [.cpu, .gpu, .ssd, .battery, .system, .sensor]
         )
         XCTAssertEqual(
             TemperatureMetricCatalog.compatibilityMetrics.map(\.domain),
-            [.cpu, .gpu, .memory, .ssd, .battery, .system, .sensor]
+            [.cpu, .gpu, .ssd, .battery, .system, .sensor]
         )
         XCTAssertEqual(TemperatureMetricCatalog.menuBarMetric(for: .hottest), nil)
         XCTAssertEqual(TemperatureMetricCatalog.menuBarMetric(for: .cpu)?.metricName, TemperatureMetricName.cpuHottest)
+        XCTAssertEqual(TemperatureMetricCatalog.menuBarMetric(for: .cpu)?.averageMetricName, TemperatureMetricName.cpuAverage)
+        XCTAssertEqual(TemperatureMetricCatalog.menuBarMetric(for: .gpu)?.averageMetricName, TemperatureMetricName.gpuAverage)
     }
 
     func testOverviewSnapshotShowsAllSupportedDomainsAndOnlyUsesValidHottest() throws {
@@ -39,6 +41,16 @@ final class TemperaturePresentationTests: XCTestCase {
                     valueCelsius: 68.0,
                     source: .hidSensors,
                     rawKey: "pACC MTR Temp Sensor0"
+                ),
+                TemperatureMetricName.cpuAverage: try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: timestamp,
+                    metricName: TemperatureMetricName.cpuAverage,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU Average",
+                    valueCelsius: 62.0,
+                    source: .hidSensors
                 ),
                 TemperatureMetricName.gpuHottest: try TemperatureSample.makeInvalid(
                     sessionID: sessionID,
@@ -76,7 +88,6 @@ final class TemperaturePresentationTests: XCTestCase {
             capabilitiesByDomain: [
                 .cpu: capability(sessionID: sessionID, domain: .cpu, source: .hidSensors, supported: true, readable: true, reasonCode: "ok", timestamp: timestamp),
                 .gpu: capability(sessionID: sessionID, domain: .gpu, source: .smc, supported: false, readable: false, reasonCode: "readFailed", timestamp: timestamp),
-                .memory: capability(sessionID: sessionID, domain: .memory, source: .smc, supported: false, readable: false, reasonCode: "unsupported", timestamp: timestamp),
                 .ssd: capability(sessionID: sessionID, domain: .ssd, source: .nvmeSMART, supported: false, readable: false, reasonCode: "unsupported", timestamp: timestamp),
                 .battery: capability(sessionID: sessionID, domain: .battery, source: .batteryIORegistry, supported: true, readable: true, reasonCode: "ok", timestamp: timestamp),
             ],
@@ -96,9 +107,9 @@ final class TemperaturePresentationTests: XCTestCase {
         let snapshot = TemperatureOverviewSnapshot(liveState: state, settings: .default)
 
         XCTAssertEqual(snapshot.hottestValueText, "68°C")
-        XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .memory, .ssd, .battery, .system, .sensor])
+        XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .ssd, .battery, .system, .sensor])
+        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .cpu })?.averageValueText, "62°C")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.statusText, "Read failed")
-        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .memory })?.statusText, "Unsupported")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .battery })?.valueText, "32°C")
         XCTAssertEqual(snapshot.availableMetricCount, 2)
     }
@@ -114,16 +125,10 @@ final class TemperaturePresentationTests: XCTestCase {
                     sessionID: sessionID,
                     timestamp: timestamp,
                     metricName: TemperatureMetricName.cpuHottest
-                ),
-                TemperatureMetricName.memoryProximity: unsupportedSample(
-                    sessionID: sessionID,
-                    timestamp: timestamp,
-                    metricName: TemperatureMetricName.memoryProximity
                 )
             ],
             capabilitiesByDomain: [
                 .cpu: capability(sessionID: sessionID, domain: .cpu, source: .hidSensors, supported: true, readable: true, reasonCode: "ok", timestamp: timestamp),
-                .memory: capability(sessionID: sessionID, domain: .memory, source: .smc, supported: false, readable: false, reasonCode: "unsupported", timestamp: timestamp),
                 .ssd: capability(sessionID: sessionID, domain: .ssd, source: .nvmeSMART, supported: false, readable: false, reasonCode: "readFailed", timestamp: timestamp),
             ],
             hottestValidSample: nil
@@ -133,7 +138,6 @@ final class TemperaturePresentationTests: XCTestCase {
 
         XCTAssertEqual(snapshot.hottestValueText, "--°C")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .cpu })?.statusText, "Stale")
-        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .memory })?.statusText, "Unsupported")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .cpu })?.isStale, true)
     }
 
@@ -146,17 +150,15 @@ final class TemperaturePresentationTests: XCTestCase {
             samplesByMetricName: [:],
             capabilitiesByDomain: [
                 .gpu: capability(sessionID: sessionID, domain: .gpu, source: .smc, supported: false, readable: false, reasonCode: "unsupported", timestamp: timestamp),
-                .memory: capability(sessionID: sessionID, domain: .memory, source: .smc, supported: true, readable: false, reasonCode: "readFailed", timestamp: timestamp),
             ],
             hottestValidSample: nil
         )
 
         let snapshot = CompatibilitySnapshot(liveState: state)
 
-        XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .memory, .ssd, .battery, .system, .sensor])
+        XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .ssd, .battery, .system, .sensor])
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.statusText, "Unsupported")
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.reasonText, "unsupported")
-        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .memory })?.statusText, "Read failed")
     }
 
     func testMenuBarTitleFormatterUsesConfiguredMetricAndKeepsTitleShort() throws {
@@ -280,6 +282,7 @@ final class TemperaturePresentationTests: XCTestCase {
             metricName: TemperatureMetricName.systemHottest,
             title: "System",
             valueText: TemperatureFormatter.placeholder(unit: .celsius),
+            averageValueText: nil,
             statusText: TemperatureFormatter.statusText(sample: sample, capability: nil),
             sourceText: TemperatureFormatter.sourceText(sample: sample, capability: nil),
             reasonText: TemperatureFormatter.reasonText(sample: sample, capability: nil),
@@ -702,23 +705,5 @@ private func staleSample(
         quality: .stale,
         source: .hidSensors,
         errorCode: "stale"
-    )
-}
-
-private func unsupportedSample(
-    sessionID: UUID,
-    timestamp: Date,
-    metricName: String
-) -> TemperatureSample {
-    try! TemperatureSample.makeInvalid(
-        sessionID: sessionID,
-        timestamp: timestamp,
-        metricName: metricName,
-        domain: .memory,
-        deviceID: "memory",
-        displayName: "Memory",
-        quality: .unsupported,
-        source: .smc,
-        errorCode: "unsupported"
     )
 }

@@ -57,6 +57,28 @@ final class CPUTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(samples.first?.valueCelsius, 58.0)
     }
 
+    func testProbeDoesNotTreatPMUHIDSensorsAsCPUTemperature() async {
+        let sessionID = UUID()
+        let timestamp = Date(timeIntervalSince1970: 25)
+        let probe = CPUTemperatureProbe(
+            platformDetector: FakeApplePlatformDetector(platform: .m4),
+            hidReader: FakeAppleSiliconTemperatureReader(values: [
+                "PMU tdie8": 61.0,
+                "PMU2 tdie8": 58.0,
+            ]),
+            smcReader: FakeSMCReader(values: [:]),
+            catalog: AppleSiliconSensorCatalog()
+        )
+
+        let samples = await probe.read(sessionID: sessionID, at: timestamp)
+
+        XCTAssertEqual(samples.count, 1)
+        XCTAssertEqual(samples[0].metricName, TemperatureMetricName.cpuHottest)
+        XCTAssertEqual(samples[0].quality, .readFailed)
+        XCTAssertNil(samples[0].valueCelsius)
+        XCTAssertNil(samples[0].rawKey)
+    }
+
     func testProbeReturnsReadFailedWhenAllSourcesAreUnavailable() async {
         let sessionID = UUID()
         let timestamp = Date(timeIntervalSince1970: 30)
@@ -95,12 +117,14 @@ final class CPUTemperatureProbeTests: XCTestCase {
 
         let samples = await probe.read(sessionID: sessionID, at: timestamp)
 
-        XCTAssertEqual(samples.count, 1)
+        XCTAssertEqual(samples.count, 2)
         XCTAssertEqual(samples[0].metricName, TemperatureMetricName.cpuHottest)
         XCTAssertEqual(samples[0].quality, .valid)
         XCTAssertEqual(samples[0].source, .smc)
         XCTAssertEqual(samples[0].rawKey, "Tp01")
         XCTAssertEqual(samples[0].valueCelsius, 109.9)
+        XCTAssertEqual(samples[1].metricName, TemperatureMetricName.cpuAverage)
+        XCTAssertEqual(samples[1].valueCelsius, 109.9)
     }
 }
 
