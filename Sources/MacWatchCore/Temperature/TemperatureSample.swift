@@ -1,6 +1,8 @@
 import Foundation
 
 public struct TemperatureSample: Codable, Identifiable, Hashable, Sendable {
+    public static let validTemperatureRange: Range<Double> = 0..<110
+
     public let id: UUID
     public let sessionID: UUID
     public let timestamp: Date
@@ -133,8 +135,10 @@ public struct TemperatureSample: Codable, Identifiable, Hashable, Sendable {
         valueCelsius: Double?
     ) throws {
         switch (quality, valueCelsius) {
-        case (.valid, .some):
+        case let (.valid, .some(value)) where isValidTemperatureValue(value):
             return
+        case (.valid, .some):
+            throw TemperatureModelError.invalidSample
         case (.valid, .none):
             throw TemperatureModelError.invalidSample
         case (_, .some):
@@ -142,5 +146,9 @@ public struct TemperatureSample: Codable, Identifiable, Hashable, Sendable {
         case (_, .none):
             return
         }
+    }
+
+    public static func isValidTemperatureValue(_ value: Double) -> Bool {
+        value.isFinite && validTemperatureRange.contains(value)
     }
 }

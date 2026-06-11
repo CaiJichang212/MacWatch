@@ -116,15 +116,17 @@ public final actor TemperatureScheduler {
 
         isPaused = true
         let currentSessionID = sessionID
-        await publishGap(
-            eventType: .systemSleepStarted,
-            sessionID: currentSessionID,
-            at: timestamp,
-            reasonCode: reason.rawValue,
-            message: reason == .systemSleep ? "system sleep started" : "paused",
-            domain: nil,
-            metricName: nil
-        )
+        if reason == .manual {
+            await publishGap(
+                eventType: .systemSleepStarted,
+                sessionID: currentSessionID,
+                at: timestamp,
+                reasonCode: reason.rawValue,
+                message: "paused",
+                domain: nil,
+                metricName: nil
+            )
+        }
     }
 
     public func resume(reason: SchedulerResumeReason, at timestamp: Date) async {
@@ -140,15 +142,17 @@ public final actor TemperatureScheduler {
             await bus.publish(.capabilities(capabilities, reason: .wake))
         }
 
-        await publishGap(
-            eventType: .systemSleepEnded,
-            sessionID: currentSessionID,
-            at: timestamp,
-            reasonCode: reason.rawValue,
-            message: reason == .systemWake ? "system sleep ended" : "resumed",
-            domain: nil,
-            metricName: nil
-        )
+        if reason == .manual {
+            await publishGap(
+                eventType: .systemSleepEnded,
+                sessionID: currentSessionID,
+                at: timestamp,
+                reasonCode: reason.rawValue,
+                message: "resumed",
+                domain: nil,
+                metricName: nil
+            )
+        }
 
         let now = clock()
         for probeID in orderedProbeIDs {
