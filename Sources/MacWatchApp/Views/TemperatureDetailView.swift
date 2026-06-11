@@ -31,9 +31,9 @@ struct TemperatureDetailView: View {
         let snapshot = TemperatureDetailSnapshot(
             descriptor: selectedDescriptor,
             series: series,
-            currentSample: runtime.liveState?.samplesByMetricName[selectedDescriptor.metricName],
+            currentSample: runtime.liveState?.samplesByMetricName[effectiveSelectedMetricName],
             currentCapability: runtime.liveState?.capabilitiesByDomain[descriptor.domain],
-            lastValidSample: runtime.liveState?.lastValidSamplesByMetricName[selectedDescriptor.metricName],
+            lastValidSample: runtime.liveState?.lastValidSamplesByMetricName[effectiveSelectedMetricName],
             fallbackText: fallback,
             settings: runtime.settings
         )
@@ -77,7 +77,7 @@ struct TemperatureDetailView: View {
                 TemperatureTrendView(
                     title: "\(snapshot.title) Trend",
                     series: series,
-                    fallbackText: fallback,
+                    fallbackText: snapshot.trendFallbackText,
                     unit: runtime.settings.temperatureUnit
                 )
             }
@@ -91,11 +91,15 @@ struct TemperatureDetailView: View {
             selectedRange = runtime.settings.defaultTrendRange
             hasAppliedDefaultRange = true
         }
+        .onChange(of: descriptor) { newDescriptor in
+            selectedMetricName = newDescriptor.metricName
+            series = nil
+        }
         .task(id: detailQueryKey) {
             let expectedKey = detailQueryKey
             let loaded = await runtime.loadSeries(
                 domain: descriptor.domain,
-                metricName: selectedMetricName,
+                metricName: effectiveSelectedMetricName,
                 range: selectedRange,
                 maxPoints: 2_000
             )
@@ -177,20 +181,24 @@ struct TemperatureDetailView: View {
         DetailQueryKey(
             sessionID: runtime.currentSession?.id,
             domain: descriptor.domain,
-            metricName: selectedMetricName,
+            metricName: effectiveSelectedMetricName,
             range: selectedRange,
             historyRevision: runtime.historyRevision
         )
     }
 
+    private var effectiveSelectedMetricName: String {
+        descriptor.resolvedDetailMetricName(selectedMetricName)
+    }
+
     private var selectedDetailDescriptor: TemperatureMetricDescriptor {
-        let option = descriptor.detailMetricOptions.first { $0.metricName == selectedMetricName }
+        let metricName = effectiveSelectedMetricName
         return TemperatureMetricDescriptor(
             id: descriptor.id,
             domain: descriptor.domain,
-            metricName: option?.metricName ?? descriptor.metricName,
+            metricName: metricName,
             averageMetricName: nil,
-            title: "\(descriptor.title) \(option?.label ?? "Hottest")",
+            title: "\(descriptor.title) \(descriptor.detailOptionLabel(for: metricName))",
             menuBarMetric: descriptor.menuBarMetric,
             isMVPCompatibilityRequired: descriptor.isMVPCompatibilityRequired
         )
@@ -208,6 +216,7 @@ struct TemperatureDetailSnapshot: Equatable {
     let peakTimeText: String
     let sourceText: String
     let rawKeyText: String?
+    let trendFallbackText: String
 
     init(
         descriptor: TemperatureMetricDescriptor,
@@ -235,11 +244,12 @@ struct TemperatureDetailSnapshot: Equatable {
             peakTimeText = "--"
             sourceText = TemperatureFormatter.sourceText(sample: currentSample, capability: currentCapability)
             rawKeyText = TemperatureFormatter.rawKeyText(sample: currentSample, capability: currentCapability)
+            trendFallbackText = fallbackText
             return
         }
+        let validSampleCount = series.statistics.validSampleCount
         sampleSummaryText = Self.sampleSummaryText(
-            validSampleCount: series.statistics.validSampleCount,
-            fallbackText: fallbackText
+            validSampleCount: validSampleCount
         )
         maximumText = Self.formatValue(series.statistics.maximumCelsius, unit: settings.temperatureUnit)
         minimumText = Self.formatValue(series.statistics.minimumCelsius, unit: settings.temperatureUnit)
@@ -247,6 +257,7 @@ struct TemperatureDetailSnapshot: Equatable {
         peakTimeText = TemperatureTimestampFormatter.shortTimeText(series.statistics.peakAt)
         sourceText = TemperatureFormatter.sourceText(sample: currentSample, capability: currentCapability)
         rawKeyText = TemperatureFormatter.rawKeyText(sample: currentSample, capability: currentCapability)
+        trendFallbackText = validSampleCount == 0 ? "No samples in selected range" : fallbackText
     }
 
     init(domainTitle: String, series: TemperatureSeries?, fallbackText: String) {
@@ -276,11 +287,7 @@ struct TemperatureDetailSnapshot: Equatable {
         return TemperatureFormatter.text(celsius: value, unit: unit)
     }
 
-    private static func sampleSummaryText(validSampleCount: Int, fallbackText: String) -> String {
-        guard validSampleCount > 0 else {
-            return fallbackText
-        }
-
+    private static func sampleSummaryText(validSampleCount: Int) -> String {
         let sampleWord = validSampleCount == 1 ? "sample" : "samples"
         return "\(validSampleCount) \(sampleWord)"
     }

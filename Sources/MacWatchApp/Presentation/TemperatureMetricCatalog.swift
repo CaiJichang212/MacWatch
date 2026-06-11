@@ -18,6 +18,17 @@ struct TemperatureMetricDescriptor: Identifiable, Equatable {
             TemperatureMetricOption(label: "Average", metricName: averageMetricName),
         ]
     }
+
+    func resolvedDetailMetricName(_ selectedMetricName: String) -> String {
+        guard detailMetricOptions.contains(where: { $0.metricName == selectedMetricName }) else {
+            return metricName
+        }
+        return selectedMetricName
+    }
+
+    func detailOptionLabel(for metricName: String) -> String {
+        detailMetricOptions.first { $0.metricName == metricName }?.label ?? "Hottest"
+    }
 }
 
 struct TemperatureMetricOption: Identifiable, Equatable {

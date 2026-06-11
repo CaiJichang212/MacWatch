@@ -24,6 +24,24 @@ final class TemperaturePresentationTests: XCTestCase {
         XCTAssertEqual(TemperatureMetricCatalog.menuBarMetric(for: .gpu)?.averageMetricName, TemperatureMetricName.gpuAverage)
     }
 
+    func testMetricDescriptorFallsBackWhenDetailSelectionBelongsToPreviousDomain() {
+        let gpu = TemperatureMetricCatalog.requiredMetric(for: .gpu)
+        let ssd = TemperatureMetricCatalog.requiredMetric(for: .ssd)
+
+        XCTAssertEqual(
+            gpu.resolvedDetailMetricName(TemperatureMetricName.cpuHottest),
+            TemperatureMetricName.gpuHottest
+        )
+        XCTAssertEqual(
+            ssd.resolvedDetailMetricName(TemperatureMetricName.gpuAverage),
+            TemperatureMetricName.ssdInternal
+        )
+        XCTAssertEqual(
+            gpu.resolvedDetailMetricName(TemperatureMetricName.gpuAverage),
+            TemperatureMetricName.gpuAverage
+        )
+    }
+
     func testOverviewSnapshotShowsAllSupportedDomainsAndOnlyUsesValidHottest() throws {
         let sessionID = UUID()
         let timestamp = Date(timeIntervalSince1970: 120)
@@ -387,6 +405,8 @@ final class TemperaturePresentationTests: XCTestCase {
 
         XCTAssertEqual(snapshot.currentValueText, "--°C")
         XCTAssertEqual(snapshot.statusText, "Read failed")
+        XCTAssertEqual(snapshot.sampleSummaryText, "0 samples")
+        XCTAssertEqual(snapshot.trendFallbackText, "No samples in selected range")
         XCTAssertEqual(snapshot.maximumText, "--")
         XCTAssertEqual(snapshot.averageText, "--")
     }
