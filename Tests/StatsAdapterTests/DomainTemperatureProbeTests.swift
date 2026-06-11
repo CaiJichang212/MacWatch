@@ -33,10 +33,15 @@ final class DomainTemperatureProbeTests: XCTestCase {
         )
 
         let ioSamples = await ioProbe.read(sessionID: sessionID, at: timestamp)
-        XCTAssertEqual(ioSamples.first?.quality, .readFailed)
-        XCTAssertNil(ioSamples.first?.valueCelsius)
-        XCTAssertNotEqual(ioSamples.first?.source, .ioReportCandidate)
-        XCTAssertEqual(ioSamples.first?.attributes["candidateSourceDisabled"], "IOAccelerator Temperature(C)")
+        XCTAssertEqual(ioSamples.map(\.metricName), [
+            TemperatureMetricName.gpuHottest,
+            TemperatureMetricName.gpuAverage,
+        ])
+        XCTAssertEqual(ioSamples.map(\.quality), [.readFailed, .readFailed])
+        XCTAssertTrue(ioSamples.allSatisfy { $0.valueCelsius == nil })
+        XCTAssertTrue(ioSamples.allSatisfy { $0.source != .ioReportCandidate })
+        XCTAssertEqual(ioSamples[0].attributes["candidateSourceDisabled"], "IOAccelerator Temperature(C)")
+        XCTAssertEqual(ioSamples[1].attributes["candidateSourceDisabled"], "IOAccelerator Temperature(C)")
     }
 
     func testGPUProbeComputesAverageAcrossStatsRecognizedSensors() async {
@@ -133,12 +138,16 @@ final class DomainTemperatureProbeTests: XCTestCase {
             catalog: AppleSiliconSensorCatalog()
         )
 
-        let gpuSample = await gpuProbe.read(sessionID: sessionID, at: timestamp).first
+        let gpuSamples = await gpuProbe.read(sessionID: sessionID, at: timestamp)
         let ssdSample = await ssdProbe.read(sessionID: sessionID, at: timestamp).first
         let batterySample = await batteryProbe.read(sessionID: sessionID, at: timestamp).first
 
-        XCTAssertEqual(gpuSample?.attributes["sourcePriority"], "HID Sensors,SMC")
-        XCTAssertNotNil(gpuSample?.attributes["attemptedRawKeys"])
+        XCTAssertEqual(gpuSamples.map(\.metricName), [
+            TemperatureMetricName.gpuHottest,
+            TemperatureMetricName.gpuAverage,
+        ])
+        XCTAssertTrue(gpuSamples.allSatisfy { $0.attributes["sourcePriority"] == "HID Sensors,SMC" })
+        XCTAssertTrue(gpuSamples.allSatisfy { $0.attributes["attemptedRawKeys"] != nil })
         XCTAssertEqual(ssdSample?.attributes["sourcePriority"], "NVMe SMART,HID Sensors,SMC")
         XCTAssertEqual(ssdSample?.attributes["smartField"], "temperature")
         XCTAssertEqual(batterySample?.attributes["sourcePriority"], "Battery IORegistry,HID Sensors,SMC")

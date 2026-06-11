@@ -72,11 +72,15 @@ final class CPUTemperatureProbeTests: XCTestCase {
 
         let samples = await probe.read(sessionID: sessionID, at: timestamp)
 
-        XCTAssertEqual(samples.count, 1)
+        XCTAssertEqual(samples.count, 2)
         XCTAssertEqual(samples[0].metricName, TemperatureMetricName.cpuHottest)
         XCTAssertEqual(samples[0].quality, .readFailed)
         XCTAssertNil(samples[0].valueCelsius)
         XCTAssertNil(samples[0].rawKey)
+        XCTAssertEqual(samples[1].metricName, TemperatureMetricName.cpuAverage)
+        XCTAssertEqual(samples[1].quality, .readFailed)
+        XCTAssertNil(samples[1].valueCelsius)
+        XCTAssertNil(samples[1].rawKey)
     }
 
     func testProbeReturnsReadFailedWhenAllSourcesAreUnavailable() async {
@@ -91,12 +95,16 @@ final class CPUTemperatureProbeTests: XCTestCase {
 
         let samples = await probe.read(sessionID: sessionID, at: timestamp)
 
-        XCTAssertEqual(samples.count, 1)
+        XCTAssertEqual(samples.count, 2)
         XCTAssertEqual(samples[0].metricName, TemperatureMetricName.cpuHottest)
         XCTAssertEqual(samples[0].quality, .readFailed)
         XCTAssertNil(samples[0].rawKey)
         XCTAssertNotNil(samples[0].attributes["attemptedRawKeys"])
         XCTAssertFalse(samples[0].attributes["attemptedRawKeys"]?.isEmpty ?? true)
+        XCTAssertEqual(samples[1].metricName, TemperatureMetricName.cpuAverage)
+        XCTAssertEqual(samples[1].quality, .readFailed)
+        XCTAssertNil(samples[1].rawKey)
+        XCTAssertEqual(samples[1].attributes["attemptedRawKeys"], samples[0].attributes["attemptedRawKeys"])
     }
 
     func testProbeRejectsOutOfRangeTemperatureValues() async {

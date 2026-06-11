@@ -243,6 +243,78 @@ final class TemperatureMonitorServiceTests: XCTestCase {
         let storedCapabilities = try repository.capabilities(sessionID: sessionID)
         XCTAssertEqual(Set(storedCapabilities.map(\.domain)), Set([.cpu, .gpu]))
     }
+
+    func testSampleOnceKeepsLatestSampleWhenMultipleProbesReturnSameMetricName() async throws {
+        let repository = InMemorySessionHistoryRepository()
+        let sessionID = UUID()
+        let timestamp = Date(timeIntervalSince1970: 500)
+        let service = TemperatureMonitorService(
+            probes: [
+                FakeTemperatureProbe(
+                    domain: .cpu,
+                    source: .hidSensors,
+                    defaultMetricName: TemperatureMetricName.cpuHottest,
+                    capability: capability(
+                        sessionID: sessionID,
+                        domain: .cpu,
+                        source: .hidSensors,
+                        supported: true,
+                        readable: true,
+                        reasonCode: "ok"
+                    ),
+                    samples: [
+                        try TemperatureSample.makeValid(
+                            sessionID: sessionID,
+                            timestamp: timestamp,
+                            metricName: TemperatureMetricName.cpuHottest,
+                            domain: .cpu,
+                            deviceID: "cpu-die-a",
+                            displayName: "CPU Hottest",
+                            valueCelsius: 60.0,
+                            source: .hidSensors,
+                            rawKey: "pACC MTR Temp Sensor0"
+                        )
+                    ]
+                ),
+                FakeTemperatureProbe(
+                    domain: .cpu,
+                    source: .smc,
+                    defaultMetricName: TemperatureMetricName.cpuHottest,
+                    capability: capability(
+                        sessionID: sessionID,
+                        domain: .cpu,
+                        source: .smc,
+                        supported: true,
+                        readable: true,
+                        reasonCode: "ok"
+                    ),
+                    samples: [
+                        try TemperatureSample.makeValid(
+                            sessionID: sessionID,
+                            timestamp: timestamp.addingTimeInterval(1),
+                            metricName: TemperatureMetricName.cpuHottest,
+                            domain: .cpu,
+                            deviceID: "cpu-die-b",
+                            displayName: "CPU Hottest",
+                            valueCelsius: 65.0,
+                            source: .smc,
+                            rawKey: "Tp01"
+                        )
+                    ]
+                ),
+            ],
+            repository: repository,
+            clock: { timestamp }
+        )
+
+        let state = await service.sampleOnce(sessionID: sessionID)
+
+        XCTAssertEqual(state.samplesByMetricName[TemperatureMetricName.cpuHottest]?.rawKey, "Tp01")
+        XCTAssertEqual(state.samplesByMetricName[TemperatureMetricName.cpuHottest]?.valueCelsius, 65.0)
+
+        let storedSamples = try repository.samples(sessionID: sessionID)
+        XCTAssertEqual(storedSamples.count, 2)
+    }
 }
 
 private struct FakeTemperatureProbe: TemperatureProbe {
