@@ -17,12 +17,13 @@ struct TemperatureTrendView: View {
 
             if let series, validSamples(series).isEmpty == false {
                 Chart {
-                    ForEach(Array(TemperatureTrendSegments.segments(for: series).enumerated()), id: \.offset) { _, segment in
-                        ForEach(segment) { sample in
+                    ForEach(TemperatureTrendSegments.renderSegments(for: series)) { segment in
+                        ForEach(segment.samples) { sample in
                             if let valueCelsius = sample.valueCelsius {
                                 LineMark(
                                     x: .value("Time", sample.timestamp),
-                                    y: .value("Temperature", chartValue(valueCelsius))
+                                    y: .value("Temperature", chartValue(valueCelsius)),
+                                    series: .value("Segment", segment.id)
                                 )
                                 .interpolationMethod(.catmullRom)
                             }
@@ -41,6 +42,7 @@ struct TemperatureTrendView: View {
                     }
                 }
                 .frame(height: 240)
+                .chartLegend(.hidden)
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
                         Rectangle()
@@ -123,6 +125,20 @@ enum TemperatureTrendSegments {
             gaps: series.gaps
         )
     }
+
+    static func renderSegments(for series: TemperatureSeries) -> [TemperatureTrendRenderSegment] {
+        segments(for: series).enumerated().map { offset, samples in
+            TemperatureTrendRenderSegment(
+                id: "\(series.metricName)-segment-\(offset)",
+                samples: samples
+            )
+        }
+    }
+}
+
+struct TemperatureTrendRenderSegment: Identifiable, Equatable {
+    let id: String
+    let samples: [TemperatureSample]
 }
 
 enum TemperatureTrendHoverResolver {
