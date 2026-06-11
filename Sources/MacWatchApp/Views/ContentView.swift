@@ -76,8 +76,6 @@ struct ContentView: View {
             return "cpu"
         case .gpu:
             return "display"
-        case .memory:
-            return "memorychip"
         case .ssd:
             return "internaldrive"
         case .battery:

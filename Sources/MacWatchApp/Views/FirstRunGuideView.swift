@@ -63,7 +63,6 @@ struct FirstRunGuideView: View {
                     Text("最高温度").tag(MenuBarDisplayMetric.hottest)
                     Text("CPU").tag(MenuBarDisplayMetric.cpu)
                     Text("GPU").tag(MenuBarDisplayMetric.gpu)
-                    Text("内存").tag(MenuBarDisplayMetric.memory)
                     Text("SSD/NAND").tag(MenuBarDisplayMetric.ssd)
                     Text("电池").tag(MenuBarDisplayMetric.battery)
                 }

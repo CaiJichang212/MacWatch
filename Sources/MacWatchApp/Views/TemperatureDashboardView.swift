@@ -82,9 +82,16 @@ struct TemperatureDashboardView: View {
                             Text(row.title)
                                 .font(.headline)
                             Spacer()
-                            Text(row.valueText)
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(row.statusText == "Valid" ? .primary : .secondary)
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(row.valueText)
+                                    .font(.title3.weight(.semibold))
+                                    .foregroundStyle(row.statusText == "Valid" ? .primary : .secondary)
+                                if let averageValueText = row.averageValueText {
+                                    Text("Avg \(averageValueText)")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
 
                         Text(row.statusText)

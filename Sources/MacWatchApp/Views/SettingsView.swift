@@ -74,7 +74,6 @@ struct SettingsView: View {
                     Text("Hottest").tag(MenuBarDisplayMetric.hottest)
                     Text("CPU").tag(MenuBarDisplayMetric.cpu)
                     Text("GPU").tag(MenuBarDisplayMetric.gpu)
-                    Text("Memory").tag(MenuBarDisplayMetric.memory)
                     Text("SSD/NAND").tag(MenuBarDisplayMetric.ssd)
                     Text("Battery").tag(MenuBarDisplayMetric.battery)
                 }

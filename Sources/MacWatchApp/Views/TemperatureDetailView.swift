@@ -6,11 +6,13 @@ struct TemperatureDetailView: View {
 
     let descriptor: TemperatureMetricDescriptor
     @State private var selectedRange: TemperatureHistoryRange = .oneHour
+    @State private var selectedMetricName: String
     @State private var hasAppliedDefaultRange = false
     @State private var series: TemperatureSeries?
 
     init(descriptor: TemperatureMetricDescriptor) {
         self.descriptor = descriptor
+        _selectedMetricName = State(initialValue: descriptor.metricName)
     }
 
     init(domain: TemperatureDomain) {
@@ -25,12 +27,13 @@ struct TemperatureDetailView: View {
         .rows
         .first(where: { $0.domain == descriptor.domain })?
         .statusText ?? "Waiting"
+        let selectedDescriptor = selectedDetailDescriptor
         let snapshot = TemperatureDetailSnapshot(
-            descriptor: descriptor,
+            descriptor: selectedDescriptor,
             series: series,
-            currentSample: runtime.liveState?.samplesByMetricName[descriptor.metricName],
+            currentSample: runtime.liveState?.samplesByMetricName[selectedDescriptor.metricName],
             currentCapability: runtime.liveState?.capabilitiesByDomain[descriptor.domain],
-            lastValidSample: runtime.liveState?.lastValidSamplesByMetricName[descriptor.metricName],
+            lastValidSample: runtime.liveState?.lastValidSamplesByMetricName[selectedDescriptor.metricName],
             fallbackText: fallback,
             settings: runtime.settings
         )
@@ -47,6 +50,16 @@ struct TemperatureDetailView: View {
                     }
 
                     Spacer()
+
+                    if descriptor.detailMetricOptions.count > 1 {
+                        Picker("Metric", selection: $selectedMetricName) {
+                            ForEach(descriptor.detailMetricOptions) { option in
+                                Text(option.label).tag(option.metricName)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 180)
+                    }
 
                     Picker("Range", selection: $selectedRange) {
                         ForEach(TemperatureHistoryRange.allCases, id: \.self) { range in
@@ -82,7 +95,7 @@ struct TemperatureDetailView: View {
             let expectedKey = detailQueryKey
             let loaded = await runtime.loadSeries(
                 domain: descriptor.domain,
-                metricName: descriptor.metricName,
+                metricName: selectedMetricName,
                 range: selectedRange,
                 maxPoints: 2_000
             )
@@ -164,9 +177,22 @@ struct TemperatureDetailView: View {
         DetailQueryKey(
             sessionID: runtime.currentSession?.id,
             domain: descriptor.domain,
-            metricName: descriptor.metricName,
+            metricName: selectedMetricName,
             range: selectedRange,
             historyRevision: runtime.historyRevision
+        )
+    }
+
+    private var selectedDetailDescriptor: TemperatureMetricDescriptor {
+        let option = descriptor.detailMetricOptions.first { $0.metricName == selectedMetricName }
+        return TemperatureMetricDescriptor(
+            id: descriptor.id,
+            domain: descriptor.domain,
+            metricName: option?.metricName ?? descriptor.metricName,
+            averageMetricName: nil,
+            title: "\(descriptor.title) \(option?.label ?? "Hottest")",
+            menuBarMetric: descriptor.menuBarMetric,
+            isMVPCompatibilityRequired: descriptor.isMVPCompatibilityRequired
         )
     }
 }
@@ -229,6 +255,7 @@ struct TemperatureDetailSnapshot: Equatable {
                 id: series?.domain ?? .cpu,
                 domain: series?.domain ?? .cpu,
                 metricName: series?.metricName ?? TemperatureMetricName.cpuHottest,
+                averageMetricName: nil,
                 title: domainTitle,
                 menuBarMetric: nil,
                 isMVPCompatibilityRequired: false
