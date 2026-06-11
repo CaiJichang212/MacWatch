@@ -29,9 +29,11 @@ final class CPUTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(samples[0].rawKey, "pACC MTR Temp Sensor0")
         XCTAssertEqual(samples[0].valueCelsius, 61.0)
         XCTAssertEqual(samples[0].attributes["rawKeys"], "Te05,Tp01,pACC MTR Temp Sensor0,eACC MTR Temp Sensor1")
+        XCTAssertEqual(samples[0].attributes["sourceSet"], "HID Sensors,SMC")
         XCTAssertEqual(samples[1].metricName, TemperatureMetricName.cpuAverage)
         XCTAssertEqual(samples[1].source, .hidSensors)
         XCTAssertEqual(samples[1].valueCelsius, 53.0)
+        XCTAssertEqual(samples[1].attributes["sourceSet"], "HID Sensors,SMC")
     }
 
     func testProbeFallsBackToSMCWhenHIDHasNoValidValues() async {

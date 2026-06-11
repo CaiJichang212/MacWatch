@@ -23,6 +23,8 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(hidSamples.first?.source, .hidSensors)
         XCTAssertEqual(hidSamples.first?.rawKey, "GPU MTR Temp Sensor0")
         XCTAssertEqual(hidSamples.last?.valueCelsius, 53.0)
+        XCTAssertEqual(hidSamples.first?.attributes["sourceSet"], "HID Sensors,SMC")
+        XCTAssertEqual(hidSamples.last?.attributes["sourceSet"], "HID Sensors,SMC")
 
         let ioProbe = GPUTemperatureProbe(
             platformDetector: FakeGPUPlatformDetector(platform: .m4),
@@ -70,6 +72,8 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(samples[1].valueCelsius, 160.0 / 3.0)
         XCTAssertEqual(samples[0].attributes["rawKeys"], "GPU MTR Temp Sensor0,GPU MTR Temp Sensor1,Tg0G")
         XCTAssertEqual(samples[1].attributes["rawKeys"], "GPU MTR Temp Sensor0,GPU MTR Temp Sensor1,Tg0G")
+        XCTAssertEqual(samples[0].attributes["sourceSet"], "HID Sensors,SMC")
+        XCTAssertEqual(samples[1].attributes["sourceSet"], "HID Sensors,SMC")
     }
 
     func testSSDProbeUsesNVMeSMARTWhenAvailable() async {
@@ -91,12 +95,11 @@ final class DomainTemperatureProbeTests: XCTestCase {
     func testSSDProbeFallsBackToNANDHIDWhenInternalSMARTDiskIsAbsent() async {
         let probe = SSDTemperatureProbe(
             nvmeReader: FakeNVMeReader(reading: nil, isPresent: false),
-            hidReader: FakeGPUHIDReader(values: [
-                "NAND CH0 temp": 38.0,
-                "PMU tdie8": 90.0,
-            ]),
-            smcReader: FakeGPUSMCReader(values: ["TH0x": 41.0]),
-            catalog: AppleSiliconSensorCatalog()
+            snapshotProvider: FakeStatsSnapshotProvider(snapshot: makeSnapshot([
+                ("NAND CH0 temp", 38.0, .hidSensors, .ssd, false),
+                ("TH0x", 41.0, .smc, .ssd, false),
+                ("PMU tdie8", 90.0, .hidSensors, .sensor, false),
+            ]))
         )
 
         let samples = await probe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 75))
@@ -126,15 +129,33 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(samples.first?.valueCelsius, 31.5)
     }
 
+    func testBatteryProbeFallsBackToSnapshotBatteryReadingWhenIORegistryIsUnreadable() async {
+        let probe = BatteryTemperatureProbe(
+            batteryReader: FakeBatteryReader(reading: nil),
+            snapshotProvider: FakeStatsSnapshotProvider(snapshot: makeSnapshot([
+                ("gas gauge battery", 32.0, .hidSensors, .battery, false),
+                ("TB1T", 34.0, .smc, .battery, false),
+                ("PMU2 tcal", 52.0, .hidSensors, .sensor, false),
+            ]))
+        )
+
+        let samples = await probe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 82))
+
+        XCTAssertEqual(samples.count, 1)
+        XCTAssertEqual(samples.first?.quality, .valid)
+        XCTAssertEqual(samples.first?.source, .smc)
+        XCTAssertEqual(samples.first?.rawKey, "TB1T")
+        XCTAssertEqual(samples.first?.valueCelsius, 34.0)
+        XCTAssertEqual(samples.first?.attributes["sourceSet"], "HID Sensors,SMC")
+    }
+
     func testSystemProbeUsesStatsSystemSMCCatalogKeys() async {
         let probe = SystemTemperatureProbe(
-            platformDetector: FakeGPUPlatformDetector(platform: .m4),
-            hidReader: FakeGPUHIDReader(values: [:]),
-            smcReader: FakeGPUSMCReader(values: [
-                "TW0P": 42.0,
-                "TL0P": 37.0,
-            ]),
-            catalog: AppleSiliconSensorCatalog()
+            snapshotProvider: FakeStatsSnapshotProvider(snapshot: makeSnapshot([
+                ("TW0P", 42.0, .smc, .system, false),
+                ("TL0P", 37.0, .smc, .system, false),
+                ("PMU2 tcal", 52.0, .hidSensors, .sensor, false),
+            ]))
         )
 
         let samples = await probe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 85))
@@ -145,6 +166,42 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(samples.first?.rawKey, "TW0P")
         XCTAssertEqual(samples.first?.valueCelsius, 42.0)
         XCTAssertEqual(samples.first?.attributes["rawKeys"], "TL0P,TW0P")
+    }
+
+    func testSystemProbeDoesNotTreatPMUOrUnknownSensorsAsSystemTemperature() async {
+        let probe = SystemTemperatureProbe(
+            snapshotProvider: FakeStatsSnapshotProvider(snapshot: makeSnapshot([
+                ("PMU2 tcal", 52.0, .hidSensors, .sensor, false),
+                ("TZZZ", 45.0, .smc, .sensor, false),
+            ]))
+        )
+
+        let samples = await probe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 86))
+
+        XCTAssertEqual(samples.count, 1)
+        XCTAssertEqual(samples.first?.quality, .readFailed)
+        XCTAssertNil(samples.first?.rawKey)
+        XCTAssertEqual(samples.first?.attributes["availableRawKeys"], "PMU2 tcal,TZZZ")
+    }
+
+    func testSensorProbeUsesPMUAndUnknownSMCReadingsFromSnapshot() async {
+        let probe = SensorTemperatureProbe(
+            snapshotProvider: FakeStatsSnapshotProvider(snapshot: makeSnapshot([
+                ("PMU2 tcal", 52.0, .hidSensors, .sensor, false),
+                ("TZZZ", 45.0, .smc, .sensor, false),
+                ("TW0P", 42.0, .smc, .system, false),
+            ]))
+        )
+
+        let samples = await probe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 87))
+
+        XCTAssertEqual(samples.count, 1)
+        XCTAssertEqual(samples.first?.quality, .valid)
+        XCTAssertEqual(samples.first?.source, .hidSensors)
+        XCTAssertEqual(samples.first?.rawKey, "PMU2 tcal")
+        XCTAssertEqual(samples.first?.valueCelsius, 52.0)
+        XCTAssertEqual(samples.first?.attributes["rawKeys"], "PMU2 tcal,TZZZ")
+        XCTAssertEqual(samples.first?.attributes["sourceSet"], "HID Sensors,SMC")
     }
 
     func testProbesReturnStatusSamplesWhenSourceIsUnavailable() async {
@@ -251,6 +308,20 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(ssd.reasonMessage, "No readable internal SSD temperature from NVMe SMART, HID Sensors, or SMC.")
     }
 
+    func testGPUCapabilityFailureMentionsIOReportCandidateFallback() async {
+        let probe = GPUTemperatureProbe(
+            platformDetector: FakeGPUPlatformDetector(platform: .m4),
+            snapshotProvider: FakeStatsSnapshotProvider(snapshot: makeSnapshot([])),
+            ioAcceleratorReader: FakeIOAcceleratorReader(reading: nil)
+        )
+
+        let capability = await probe.detect(sessionID: UUID(), at: Date(timeIntervalSince1970: 97.5))
+
+        XCTAssertFalse(capability.readable)
+        XCTAssertEqual(capability.reasonCode, "noReadableTemperature")
+        XCTAssertEqual(capability.reasonMessage, "No readable GPU temperature from HID Sensors, SMC, or IOReport Candidate.")
+    }
+
     func testSSDCapabilityMarksUnsupportedWhenInternalSMARTDiskIsAbsent() async {
         let probe = SSDTemperatureProbe(
             nvmeReader: FakeNVMeReader(reading: nil, isPresent: false),
@@ -266,6 +337,35 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(capability.reasonCode, "internalSMARTDiskUnavailable")
     }
 
+}
+
+private func makeSnapshot(
+    _ readings: [(String, Double, TemperatureSource, TemperatureDomain, Bool)],
+    platform: ApplePlatform? = .m4
+) -> StatsTemperatureSensorSnapshot {
+    StatsTemperatureSensorSnapshot(
+        readings: readings.map { rawKey, value, source, domain, averageCandidate in
+            StatsTemperatureSensorReading(
+                rawKey: rawKey,
+                displayName: rawKey,
+                valueCelsius: value,
+                source: source,
+                domain: domain,
+                averageCandidate: averageCandidate
+            )
+        },
+        availableHIDKeys: readings.filter { $0.2 == .hidSensors }.map(\.0).sorted(),
+        availableSMCKeys: readings.filter { $0.2 == .smc }.map(\.0).sorted(),
+        detectedPlatform: platform
+    )
+}
+
+private struct FakeStatsSnapshotProvider: StatsTemperatureSensorSnapshotProviding {
+    let snapshot: StatsTemperatureSensorSnapshot
+
+    func readSnapshot() -> StatsTemperatureSensorSnapshot {
+        snapshot
+    }
 }
 
 private struct FakeGPUPlatformDetector: ApplePlatformDetecting {
