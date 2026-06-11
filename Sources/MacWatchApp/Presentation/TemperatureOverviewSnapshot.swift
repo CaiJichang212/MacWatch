@@ -7,6 +7,7 @@ struct TemperatureOverviewSnapshot: Equatable {
         let metricName: String
         let title: String
         let valueText: String
+        let averageValueText: String?
         let statusText: String
         let sourceText: String
         let reasonText: String?
@@ -41,8 +42,12 @@ struct TemperatureOverviewSnapshot: Equatable {
 
         rows = TemperatureMetricCatalog.overviewMetrics.map { descriptor in
             let sample = liveState?.samplesByMetricName[descriptor.metricName]
+            let averageSample = descriptor.averageMetricName.flatMap { liveState?.samplesByMetricName[$0] }
             let capability = liveState?.capabilitiesByDomain[descriptor.domain]
             let lastValidSample = liveState?.lastValidSamplesByMetricName[descriptor.metricName]
+            let lastValidAverageSample = descriptor.averageMetricName.flatMap {
+                liveState?.lastValidSamplesByMetricName[$0]
+            }
 
             return Row(
                 domain: descriptor.domain,
@@ -51,6 +56,11 @@ struct TemperatureOverviewSnapshot: Equatable {
                 valueText: TemperatureFormatter.valueText(
                     sample: sample,
                     lastValidSample: lastValidSample,
+                    unit: settings.temperatureUnit
+                ),
+                averageValueText: descriptor.averageMetricName == nil ? nil : TemperatureFormatter.valueText(
+                    sample: averageSample,
+                    lastValidSample: lastValidAverageSample,
                     unit: settings.temperatureUnit
                 ),
                 statusText: TemperatureFormatter.statusText(sample: sample, capability: capability),
