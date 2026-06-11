@@ -1,6 +1,7 @@
 import AppKit
 import MacWatchCore
 import StatsAdapter
+import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -12,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let shouldOpenMainWindowOnLaunch: Bool
     private let windowCommandCenter: WindowCommandCenter
     private var menuBarController: MenuBarController?
+    private var mainWindow: NSWindow?
+    private var settingsWindow: NSWindow?
     private var observers: [NSObjectProtocol] = []
     let runtime: MacWatchRuntime
     private lazy var lifecycleCoordinator = AppLifecycleCoordinator { [weak self] event in
@@ -80,6 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         lifecycleCoordinator.record(.launched)
+        windowCommandCenter.registerOpenMainWindowAction { [weak self] in
+            self?.showMainWindow()
+        }
         if shouldSetupMenuBarOnLaunch {
             menuBarController = MenuBarController(
                 runtime: runtime,
@@ -141,8 +147,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forceShowFirstRunGuide = false
         case .dashboardOpen, .popupOpen:
             forceShowFirstRunGuide = false
+        case .resourcesSteadyState:
+            initialSettings.launchMainWindowOnStart = false
+            forceShowFirstRunGuide = false
         default:
             break
+        }
+
+        if ProcessInfo.processInfo.environment["MACWATCH_RESOURCE_STEADY_STATE"] == "1" {
+            initialSettings.launchMainWindowOnStart = false
+            forceShowFirstRunGuide = false
         }
 
         return (initialSettings, forceShowFirstRunGuide)
@@ -211,16 +225,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
-
-        if #available(macOS 14, *) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } else {
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        }
+        showSettingsWindow()
     }
 
     private func quitApplication() {
         NSApp.terminate(nil)
+    }
+
+    private func showMainWindow() {
+        if let mainWindow {
+            mainWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let hostingController = NSHostingController(
+            rootView: ContentView()
+                .environmentObject(runtime)
+        )
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "MacWatch"
+        window.setContentSize(NSSize(width: 920, height: 640))
+        window.minSize = NSSize(width: 920, height: 640)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        mainWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showSettingsWindow() {
+        if let settingsWindow {
+            settingsWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let hostingController = NSHostingController(
+            rootView: SettingsView()
+                .environmentObject(runtime)
+                .frame(width: 520)
+        )
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Settings"
+        window.setContentSize(NSSize(width: 520, height: 320))
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        settingsWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func showAcceptancePopup() {

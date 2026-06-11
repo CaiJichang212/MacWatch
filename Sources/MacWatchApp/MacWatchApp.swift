@@ -1,13 +1,12 @@
-import SwiftUI
 import StatsAdapter
 import Darwin
+import AppKit
 
 @main
-struct MacWatchApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    private let windowCommandCenter = WindowCommandCenter.shared
+final class MacWatchApp {
+    private static var appDelegate: AppDelegate?
 
-    init() {
+    static func main() {
         do {
             let cliArguments = try MacWatchCLIArguments(arguments: CommandLine.arguments)
             AcceptanceCoordinator.shared.configure(scenario: cliArguments.acceptanceScenario)
@@ -27,35 +26,12 @@ struct MacWatchApp: App {
         } catch {
             AcceptanceReportWriter.writeErrorAndExit(error.localizedDescription)
         }
-    }
 
-    var body: some Scene {
-        WindowGroup(id: "main") {
-            ContentView()
-                .environmentObject(appDelegate.runtime)
-                .background(
-                    MainWindowBridge(windowCommandCenter: windowCommandCenter)
-                )
-        }
-        Settings {
-            SettingsView()
-                .environmentObject(appDelegate.runtime)
-        }
-    }
-}
-
-private struct MainWindowBridge: View {
-    @Environment(\.openWindow) private var openWindow
-
-    let windowCommandCenter: WindowCommandCenter
-
-    var body: some View {
-        Color.clear
-            .frame(width: 0, height: 0)
-            .task {
-                windowCommandCenter.registerOpenMainWindowAction {
-                    openWindow(id: "main")
-                }
-            }
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        appDelegate = delegate
+        app.delegate = delegate
+        app.setActivationPolicy(.accessory)
+        app.run()
     }
 }
