@@ -72,6 +72,26 @@ final class TemperatureModelTests: XCTestCase {
         }
     }
 
+    func testValidSamplesRejectOutOfRangeAndNaNTemperatures() {
+        for invalidValue in [-1.0, 110.0, Double.nan] {
+            XCTAssertThrowsError(
+                try TemperatureSample.makeValid(
+                    sessionID: UUID(),
+                    timestamp: Date(timeIntervalSince1970: 1),
+                    metricName: "cpu.temperature.hottest",
+                    domain: .cpu,
+                    deviceID: "die-0",
+                    displayName: "CPU Hottest",
+                    valueCelsius: invalidValue,
+                    source: .hidSensors
+                ),
+                "Expected \(invalidValue) to be rejected"
+            ) { error in
+                XCTAssertEqual(error as? TemperatureModelError, .invalidSample)
+            }
+        }
+    }
+
     func testQueryRequiresChronologicalRangeAndPositiveMaxPoints() {
         XCTAssertNoThrow(
             try TemperatureQuery(

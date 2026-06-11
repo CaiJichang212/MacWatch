@@ -5,6 +5,23 @@ import XCTest
 
 final class AppDelegateTests: XCTestCase {
     @MainActor
+    func testResourceSteadyStateEnvironmentDisablesLaunchWindowAndFirstRunGuide() {
+        setenv("MACWATCH_RESOURCE_STEADY_STATE", "1", 1)
+        defer { unsetenv("MACWATCH_RESOURCE_STEADY_STATE") }
+
+        let appDelegate = AppDelegate(
+            sessionHistoryRepository: InMemorySessionHistoryRepository(),
+            shouldSetupMenuBarOnLaunch: false,
+            shouldRegisterObserversOnLaunch: false,
+            shouldStartRuntimeOnLaunch: false,
+            shouldOpenMainWindowOnLaunch: false
+        )
+
+        XCTAssertFalse(appDelegate.runtime.settings.launchMainWindowOnStart)
+        XCTAssertFalse(appDelegate.runtime.shouldShowFirstRunGuide)
+    }
+
+    @MainActor
     func testLaunchingAppCreatesMonitoringSessionWithoutStartingRuntimeWhenDisabled() async throws {
         let repository = InMemorySessionHistoryRepository()
         let appDelegate = AppDelegate(

@@ -232,7 +232,7 @@ final class TemperatureSchedulerTests: XCTestCase {
         XCTAssertEqual(sensorProbe.readCount, 3)
     }
 
-    func testSleepAndWakePauseAndResumeSequencePublishesGapsAndRedetectsCapabilities() async {
+    func testSleepAndWakePauseAndResumeSequenceDoesNotPublishSystemGapsAndRedetectsCapabilities() async {
         let sessionID = UUID()
         let probe = ManualTickProbe(
             id: "cpu-primary",
@@ -278,12 +278,51 @@ final class TemperatureSchedulerTests: XCTestCase {
 
         let events = await collector.snapshot()
         XCTAssertEqual(events.capabilityReasons, [.appStart, .wake])
+        XCTAssertEqual(events.gapTypes, [])
+        XCTAssertEqual(probe.detectCount, 2)
+        XCTAssertGreaterThanOrEqual(probe.readCount, 2)
+    }
+
+    func testManualPauseAndResumeStillPublishManualGaps() async {
+        let sessionID = UUID()
+        let probe = ManualTickProbe(
+            id: "cpu-primary",
+            domain: .cpu,
+            source: .hidSensors,
+            defaultMetricName: TemperatureMetricName.cpuHottest
+        )
+        let repository = InMemorySessionHistoryRepository()
+        let capabilityService = TemperatureCapabilityService(
+            probes: [probe],
+            repository: repository,
+            clock: { Date() }
+        )
+
+        let bus = SampleBus()
+        let collector = SchedulerTestCollector()
+        _ = await bus.subscribe { event in
+            await collector.record(event)
+        }
+
+        let clock = DeterministicClock(initial: Date(timeIntervalSince1970: 250))
+        let scheduler = TemperatureScheduler(
+            probes: [probe],
+            capabilityService: capabilityService,
+            bus: bus,
+            clock: { clock.now() },
+            minimumTickInterval: 9999
+        )
+
+        await scheduler.start(sessionID: sessionID)
+        await scheduler.pause(reason: .manual, at: clock.advance(by: 1))
+        await scheduler.resume(reason: .manual, at: clock.advance(by: 1))
+
+        let events = await collector.snapshot()
         XCTAssertEqual(
             events.gapTypes,
             [.systemSleepStarted, .systemSleepEnded]
         )
-        XCTAssertEqual(probe.detectCount, 2)
-        XCTAssertGreaterThanOrEqual(probe.readCount, 2)
+        XCTAssertEqual(events.capabilityReasons, [.appStart])
     }
 
     func testConsecutiveReadFailuresPublishStaleAndProbeStaleGap() async {

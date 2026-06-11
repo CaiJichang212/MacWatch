@@ -602,6 +602,65 @@ final class TemperaturePresentationTests: XCTestCase {
         XCTAssertEqual(segments[0].map(\.timestamp), [base])
         XCTAssertEqual(segments[1].map(\.timestamp), [base.addingTimeInterval(18), base.addingTimeInterval(20)])
     }
+
+    func testTrendRenderSegmentsExposeStableSeriesIDs() throws {
+        let sessionID = UUID()
+        let base = Date(timeIntervalSince1970: 200)
+        let series = TemperatureSeries(
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            samples: [
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base,
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 60,
+                    source: .hidSensors
+                ),
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base.addingTimeInterval(5),
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 62,
+                    source: .hidSensors
+                ),
+                try TemperatureSample.makeValid(
+                    sessionID: sessionID,
+                    timestamp: base.addingTimeInterval(20),
+                    metricName: TemperatureMetricName.cpuHottest,
+                    domain: .cpu,
+                    deviceID: "cpu",
+                    displayName: "CPU",
+                    valueCelsius: 68,
+                    source: .hidSensors
+                ),
+            ],
+            gaps: [
+                TimelineEvent(
+                    id: UUID(),
+                    sessionID: sessionID,
+                    eventType: .systemSleepStarted,
+                    startedAt: base.addingTimeInterval(8),
+                    endedAt: base.addingTimeInterval(18),
+                    domain: .cpu,
+                    metricName: TemperatureMetricName.cpuHottest,
+                    reasonCode: "sleep",
+                    message: "sleep"
+                )
+            ]
+        )
+
+        let renderSegments = TemperatureTrendSegments.renderSegments(for: series)
+
+        XCTAssertEqual(renderSegments.map(\.id), ["cpu.temperature.hottest-segment-0", "cpu.temperature.hottest-segment-1"])
+        XCTAssertEqual(renderSegments.map(\.samples.count), [2, 1])
+    }
 }
 
 private func capability(

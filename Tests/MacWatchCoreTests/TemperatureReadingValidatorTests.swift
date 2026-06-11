@@ -4,8 +4,9 @@ import XCTest
 final class TemperatureReadingValidatorTests: XCTestCase {
     func testTemperatureReadingValidatorHonorsBoundaryRules() {
         XCTAssertTrue(TemperatureReadingValidator.isValidCelsius(0))
-        XCTAssertTrue(TemperatureReadingValidator.isValidCelsius(110))
+        XCTAssertTrue(TemperatureReadingValidator.isValidCelsius(109.9))
         XCTAssertFalse(TemperatureReadingValidator.isValidCelsius(-0.1))
+        XCTAssertFalse(TemperatureReadingValidator.isValidCelsius(110))
         XCTAssertFalse(TemperatureReadingValidator.isValidCelsius(110.1))
         XCTAssertFalse(TemperatureReadingValidator.isValidCelsius(.nan))
         XCTAssertFalse(TemperatureReadingValidator.isValidCelsius(.infinity))
@@ -54,4 +55,3 @@ final class TemperatureReadingValidatorTests: XCTestCase {
         )
     }
 }
-

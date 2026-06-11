@@ -165,6 +165,21 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(capability.reasonMessage, "No readable battery temperature from Battery IORegistry, HID Sensors, or SMC.")
     }
 
+    func testBatteryCapabilityMarksUnsupportedWhenBatteryServiceIsAbsent() async {
+        let probe = BatteryTemperatureProbe(
+            batteryReader: FakeBatteryReader(reading: nil, isPresent: false),
+            hidReader: FakeGPUHIDReader(values: [:]),
+            smcReader: FakeGPUSMCReader(values: [:]),
+            catalog: AppleSiliconSensorCatalog()
+        )
+
+        let capability = await probe.detect(sessionID: UUID(), at: Date(timeIntervalSince1970: 96.5))
+
+        XCTAssertFalse(capability.supported)
+        XCTAssertFalse(capability.readable)
+        XCTAssertEqual(capability.reasonCode, "batteryServiceUnavailable")
+    }
+
     func testUnavailableDomainCapabilitiesExposeSpecificNoReadableTemperatureReason() async {
         let sessionID = UUID()
         let timestamp = Date(timeIntervalSince1970: 97)
@@ -191,6 +206,35 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertFalse(ssd.readable)
         XCTAssertEqual(ssd.reasonCode, "noReadableTemperature")
         XCTAssertEqual(ssd.reasonMessage, "No readable internal SSD temperature from NVMe SMART, HID Sensors, or SMC.")
+    }
+
+    func testSSDCapabilityMarksUnsupportedWhenInternalSMARTDiskIsAbsent() async {
+        let probe = SSDTemperatureProbe(
+            nvmeReader: FakeNVMeReader(reading: nil, isPresent: false),
+            hidReader: FakeGPUHIDReader(values: [:]),
+            smcReader: FakeGPUSMCReader(values: [:]),
+            catalog: AppleSiliconSensorCatalog()
+        )
+
+        let capability = await probe.detect(sessionID: UUID(), at: Date(timeIntervalSince1970: 98))
+
+        XCTAssertFalse(capability.supported)
+        XCTAssertFalse(capability.readable)
+        XCTAssertEqual(capability.reasonCode, "internalSMARTDiskUnavailable")
+    }
+
+    func testMemoryCapabilityMarksUnsupportedWhenPlatformCannotBeDetected() async {
+        let probe = MemoryTemperatureProbe(
+            platformDetector: FakeGPUPlatformDetector(platform: nil),
+            smcReader: FakeGPUSMCReader(values: [:]),
+            catalog: AppleSiliconSensorCatalog()
+        )
+
+        let capability = await probe.detect(sessionID: UUID(), at: Date(timeIntervalSince1970: 99))
+
+        XCTAssertFalse(capability.supported)
+        XCTAssertFalse(capability.readable)
+        XCTAssertEqual(capability.reasonCode, "platformUnsupported")
     }
 }
 
@@ -232,16 +276,26 @@ private struct FakeIOAcceleratorReader: IOAcceleratorTemperatureReadingSource {
 
 private struct FakeNVMeReader: NVMeSMARTTemperatureReadingSource {
     let reading: NVMeSMARTTemperatureReading?
+    var isPresent = true
 
     func readInternalTemperature() -> NVMeSMARTTemperatureReading? {
         reading
+    }
+
+    func hasInternalSMARTCapableDisk() -> Bool {
+        isPresent
     }
 }
 
 private struct FakeBatteryReader: BatteryTemperatureReadingSource {
     let reading: BatteryTemperatureReading?
+    var isPresent = true
 
     func readTemperature() -> BatteryTemperatureReading? {
         reading
+    }
+
+    func hasBatteryService() -> Bool {
+        isPresent
     }
 }
