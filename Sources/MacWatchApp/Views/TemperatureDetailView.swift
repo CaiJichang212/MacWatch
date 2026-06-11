@@ -136,6 +136,11 @@ struct TemperatureDetailView: View {
                 .foregroundStyle(.secondary)
             Text("Samples in range: \(snapshot.sampleSummaryText)")
                 .foregroundStyle(.secondary)
+            if let rawKeyText = snapshot.rawKeyText {
+                Text("Raw key: \(rawKeyText)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
@@ -176,6 +181,7 @@ struct TemperatureDetailSnapshot: Equatable {
     let averageText: String
     let peakTimeText: String
     let sourceText: String
+    let rawKeyText: String?
 
     init(
         descriptor: TemperatureMetricDescriptor,
@@ -202,6 +208,7 @@ struct TemperatureDetailSnapshot: Equatable {
             averageText = "--"
             peakTimeText = "--"
             sourceText = TemperatureFormatter.sourceText(sample: currentSample, capability: currentCapability)
+            rawKeyText = TemperatureFormatter.rawKeyText(sample: currentSample, capability: currentCapability)
             return
         }
         sampleSummaryText = Self.sampleSummaryText(
@@ -213,6 +220,7 @@ struct TemperatureDetailSnapshot: Equatable {
         averageText = Self.formatValue(series.statistics.averageCelsius, unit: settings.temperatureUnit)
         peakTimeText = TemperatureTimestampFormatter.shortTimeText(series.statistics.peakAt)
         sourceText = TemperatureFormatter.sourceText(sample: currentSample, capability: currentCapability)
+        rawKeyText = TemperatureFormatter.rawKeyText(sample: currentSample, capability: currentCapability)
     }
 
     init(domainTitle: String, series: TemperatureSeries?, fallbackText: String) {
