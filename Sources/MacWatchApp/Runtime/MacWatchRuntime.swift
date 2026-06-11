@@ -34,6 +34,7 @@ protocol MacWatchTemperatureProbeProviding {
     func makeSystemProbes() -> [any TemperatureProbe]
     func makeSensorProbes() -> [any TemperatureProbe]
     func makeProbes() -> [any TemperatureProbe]
+    func invalidateTemperatureSnapshots()
 }
 
 extension MacWatchTemperatureProbeProviding {
@@ -48,6 +49,8 @@ extension MacWatchTemperatureProbeProviding {
     func makeProbes() -> [any TemperatureProbe] {
         makeFastProbes() + makeSlowProbes() + makeSystemProbes() + makeSensorProbes()
     }
+
+    func invalidateTemperatureSnapshots() {}
 }
 
 struct StatsAdapterTemperatureProbeProvider: MacWatchTemperatureProbeProviding {
@@ -60,6 +63,18 @@ struct StatsAdapterTemperatureProbeProvider: MacWatchTemperatureProbeProviding {
     func makeSlowProbes() -> [any TemperatureProbe] {
         factory.makeSlowProbes()
     }
+
+    func makeSystemProbes() -> [any TemperatureProbe] {
+        factory.makeSystemProbes()
+    }
+
+    func makeSensorProbes() -> [any TemperatureProbe] {
+        factory.makeSensorProbes()
+    }
+
+    func invalidateTemperatureSnapshots() {
+        factory.invalidateTemperatureSnapshots()
+    }
 }
 
 @MainActor
@@ -67,6 +82,8 @@ final class MacWatchRuntime: ObservableObject {
     @Published private(set) var currentSession: MonitoringSession?
     @Published private(set) var liveState: LiveTemperatureState?
     @Published private(set) var settings: AppSettings
+    @Published private(set) var shouldShowFirstRunGuide: Bool
+    let firstRunGuideContext: FirstRunGuideContext
     @Published private(set) var historyRevision: Int = 0
     @Published private(set) var historyErrorMessage: String?
 
@@ -86,6 +103,9 @@ final class MacWatchRuntime: ObservableObject {
     private let fastDomains: Set<TemperatureDomain>
     private let fastSampleIntervalOverride: TimeInterval?
     private let slowSampleIntervalOverride: TimeInterval?
+    private let firstRunGuideStateStore: FirstRunGuideStateStore
+    private let historyWriter: SessionHistoryWriter
+    private let invalidateTemperatureSnapshots: () -> Void
     private var didSubscribe = false
     private var schedulerRestartGeneration = 0
     private var schedulerRestartTask: Task<Void, Never>?
@@ -95,6 +115,9 @@ final class MacWatchRuntime: ObservableObject {
         settingsStore: SettingsStore = MacWatchSharedDependencies.settingsStore,
         probeProvider: MacWatchTemperatureProbeProviding = StatsAdapterTemperatureProbeProvider(),
         schedulerBuilder: any TemperatureSchedulerBuilding = LiveTemperatureSchedulerBuilder(),
+        initialSettings: AppSettings? = nil,
+        forceShowFirstRunGuide: Bool? = nil,
+        firstRunGuideStateStore: FirstRunGuideStateStore = FirstRunGuideStateStore(),
         fastSampleInterval: TimeInterval? = nil,
         slowSampleInterval: TimeInterval? = nil,
         clock: @escaping @Sendable () -> Date = { Date() }
@@ -104,9 +127,15 @@ final class MacWatchRuntime: ObservableObject {
         self.schedulerBuilder = schedulerBuilder
         self.seriesQueryExecutor = TemperatureSeriesQueryExecutor(repository: sessionHistoryRepository)
         self.clock = clock
-        self.settings = settingsStore.load()
+        self.settings = initialSettings ?? settingsStore.load()
         self.fastSampleIntervalOverride = fastSampleInterval
         self.slowSampleIntervalOverride = slowSampleInterval
+        self.firstRunGuideStateStore = firstRunGuideStateStore
+        self.shouldShowFirstRunGuide = forceShowFirstRunGuide
+            ?? firstRunGuideStateStore.shouldShowFirstRunGuide()
+        self.firstRunGuideContext = FirstRunGuideContext.detect()
+        self.historyWriter = SessionHistoryWriter(repository: sessionHistoryRepository)
+        self.invalidateTemperatureSnapshots = probeProvider.invalidateTemperatureSnapshots
 
         let fastProbes = probeProvider.makeFastProbes()
         let probes = probeProvider.makeProbes()
@@ -121,6 +150,20 @@ final class MacWatchRuntime: ObservableObject {
         )
         self.scheduler = makeNoopTemperatureScheduler()
         self.scheduler = makeScheduler()
+    }
+
+    func dismissFirstRunGuide() {
+        shouldShowFirstRunGuide = false
+        firstRunGuideStateStore.markFirstRunGuideCompleted()
+    }
+
+    func completeFirstRunGuide(configuration: FirstRunGuideConfiguration) {
+        updateSettings { settings in
+            settings.temperatureUnit = configuration.temperatureUnit
+            settings.menuBarDisplayMetric = configuration.menuBarDisplayMetric
+            settings.refreshInterval = configuration.refreshInterval
+        }
+        dismissFirstRunGuide()
     }
 
     func start() {
@@ -147,6 +190,7 @@ final class MacWatchRuntime: ObservableObject {
                 await scheduler.pause(reason: .systemSleep, at: clock())
             }
         case .didWake:
+            invalidateTemperatureSnapshots()
             Task {
                 await scheduler.resume(reason: .systemWake, at: clock())
             }
@@ -274,69 +318,22 @@ final class MacWatchRuntime: ObservableObject {
 
         switch event {
         case let .samples(samples, context) where context.shouldWriteHistory:
-            var wroteHistory = false
-            for sample in samples {
-                do {
-                    try repository.insertSample(sample)
-                    wroteHistory = true
-                } catch {
-                    await recordHistoryWriteFailure(
-                        sessionID: context.sessionID,
-                        timestamp: context.sampledAt,
-                        domain: sample.domain,
-                        metricName: sample.metricName,
-                        message: error.localizedDescription
-                    )
-                }
-            }
-            if wroteHistory {
-                historyRevision += 1
-                historyErrorMessage = nil
-            }
+            apply(historyWriteResult: await historyWriter.writeSamples(samples, context: context))
         case .samples:
             return
         case let .gap(event):
-            do {
-                try repository.insertTimelineEvent(event)
-                historyRevision += 1
-                historyErrorMessage = nil
-            } catch {
-                await recordHistoryWriteFailure(
-                    sessionID: event.sessionID,
-                    timestamp: event.startedAt,
-                    domain: event.domain,
-                    metricName: event.metricName,
-                    message: error.localizedDescription
-                )
-            }
+            apply(historyWriteResult: await historyWriter.writeTimelineEvent(event))
         case .capabilities:
             return
         }
     }
 
-    private func recordHistoryWriteFailure(
-        sessionID: UUID,
-        timestamp: Date,
-        domain: TemperatureDomain?,
-        metricName: String?,
-        message: String
-    ) async {
-        do {
-            try repository.insertTimelineEvent(
-                TimelineEvent(
-                    id: UUID(),
-                    sessionID: sessionID,
-                    eventType: .historyWriteFailed,
-                    startedAt: timestamp,
-                    endedAt: nil,
-                    domain: domain,
-                    metricName: metricName,
-                    reasonCode: "historyWriteFailed",
-                    message: message
-                )
-            )
-        } catch {
-            return
+    private func apply(historyWriteResult: SessionHistoryWriteResult) {
+        if historyWriteResult.didWriteHistory {
+            historyRevision += 1
+            historyErrorMessage = nil
+        } else if let errorMessage = historyWriteResult.errorMessage {
+            historyErrorMessage = errorMessage
         }
     }
 
