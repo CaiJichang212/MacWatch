@@ -217,8 +217,6 @@ public final class InMemorySessionHistoryRepository: SessionHistoryRepository {
             return "cpu.temperature.hottest"
         case .gpu:
             return "gpu.temperature.hottest"
-        case .memory:
-            return "memory.temperature.proximity"
         case .ssd:
             return "ssd.temperature.internal"
         case .battery:

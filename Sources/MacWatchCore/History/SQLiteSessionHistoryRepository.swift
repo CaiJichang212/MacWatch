@@ -161,8 +161,6 @@ public final class SQLiteSessionHistoryRepository: SessionHistoryRepository {
             return TemperatureMetricName.cpuHottest
         case .gpu:
             return TemperatureMetricName.gpuHottest
-        case .memory:
-            return TemperatureMetricName.memoryProximity
         case .ssd:
             return TemperatureMetricName.ssdInternal
         case .battery:
