@@ -73,13 +73,13 @@ public final class NVMeSMARTTemperatureReader: NVMeSMARTTemperatureReadingSource
             return nil
         }
 
-        let kelvin = Double(UInt16(bytes: (smartData.temperature.1, smartData.temperature.0)))
+        let kelvin = UInt16(bytes: (smartData.temperature.1, smartData.temperature.0))
         guard kelvin > 0 else {
             return nil
         }
 
         return NVMeSMARTTemperatureReading(
-            valueCelsius: kelvin - 273.15,
+            valueCelsius: Self.celsiusFromSMARTKelvin(kelvin),
             smartField: "temperature"
         )
     }
@@ -168,6 +168,10 @@ public final class NVMeSMARTTemperatureReader: NVMeSMARTTemperatureReadingSource
         }
 
         return false
+    }
+
+    static func celsiusFromSMARTKelvin(_ kelvin: UInt16) -> Double {
+        Double(Int(kelvin) - 273)
     }
 
     private static func boolValue(_ value: Any?) -> Bool? {

@@ -43,49 +43,43 @@ public enum ApplePlatform: String, CaseIterable, Sendable {
 
 public extension ApplePlatform {
     init?(chipName: String) {
-        switch chipName.lowercased() {
-        case "apple m1":
-            self = .m1
-        case "apple m1 pro":
-            self = .m1Pro
-        case "apple m1 max":
-            self = .m1Max
-        case "apple m1 ultra":
-            self = .m1Ultra
-        case "apple m2":
-            self = .m2
-        case "apple m2 pro":
-            self = .m2Pro
-        case "apple m2 max":
-            self = .m2Max
-        case "apple m2 ultra":
-            self = .m2Ultra
-        case "apple m3":
-            self = .m3
-        case "apple m3 pro":
-            self = .m3Pro
-        case "apple m3 max":
-            self = .m3Max
-        case "apple m3 ultra":
-            self = .m3Ultra
-        case "apple m4":
-            self = .m4
-        case "apple m4 pro":
-            self = .m4Pro
-        case "apple m4 max":
-            self = .m4Max
-        case "apple m4 ultra":
-            self = .m4Ultra
-        case "apple m5":
-            self = .m5
-        case "apple m5 pro":
-            self = .m5Pro
-        case "apple m5 max":
-            self = .m5Max
-        case "apple m5 ultra":
-            self = .m5Ultra
-        default:
-            return nil
+        let normalized = chipName
+            .lowercased()
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        for (prefix, platform) in Self.chipNamePrefixes {
+            if normalized == prefix || normalized.hasPrefix("\(prefix) ") || normalized.hasPrefix("\(prefix)(") {
+                self = platform
+                return
+            }
         }
+
+        return nil
+    }
+
+    private static var chipNamePrefixes: [(String, ApplePlatform)] {
+        [
+            ("apple m1 ultra", .m1Ultra),
+            ("apple m1 max", .m1Max),
+            ("apple m1 pro", .m1Pro),
+            ("apple m1", .m1),
+            ("apple m2 ultra", .m2Ultra),
+            ("apple m2 max", .m2Max),
+            ("apple m2 pro", .m2Pro),
+            ("apple m2", .m2),
+            ("apple m3 ultra", .m3Ultra),
+            ("apple m3 max", .m3Max),
+            ("apple m3 pro", .m3Pro),
+            ("apple m3", .m3),
+            ("apple m4 ultra", .m4Ultra),
+            ("apple m4 max", .m4Max),
+            ("apple m4 pro", .m4Pro),
+            ("apple m4", .m4),
+            ("apple m5 ultra", .m5Ultra),
+            ("apple m5 max", .m5Max),
+            ("apple m5 pro", .m5Pro),
+            ("apple m5", .m5),
+        ]
     }
 }
