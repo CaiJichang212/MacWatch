@@ -4,7 +4,7 @@ import XCTest
 @testable import StatsAdapter
 
 final class DomainTemperatureProbeTests: XCTestCase {
-    func testGPUProbePrefersHIDButDoesNotPromoteIOAcceleratorCandidateToValidTemperature() async {
+    func testGPUProbePrefersStatsSensorsThenUsesIOAcceleratorFallback() async {
         let sessionID = UUID()
         let timestamp = Date(timeIntervalSince1970: 50)
         let hidProbe = GPUTemperatureProbe(
@@ -22,7 +22,7 @@ final class DomainTemperatureProbeTests: XCTestCase {
         ])
         XCTAssertEqual(hidSamples.first?.source, .hidSensors)
         XCTAssertEqual(hidSamples.first?.rawKey, "GPU MTR Temp Sensor0")
-        XCTAssertEqual(hidSamples.last?.valueCelsius, 57.0)
+        XCTAssertEqual(hidSamples.last?.valueCelsius, 53.0)
 
         let ioProbe = GPUTemperatureProbe(
             platformDetector: FakeGPUPlatformDetector(platform: .m4),
@@ -37,11 +37,12 @@ final class DomainTemperatureProbeTests: XCTestCase {
             TemperatureMetricName.gpuHottest,
             TemperatureMetricName.gpuAverage,
         ])
-        XCTAssertEqual(ioSamples.map(\.quality), [.readFailed, .readFailed])
-        XCTAssertTrue(ioSamples.allSatisfy { $0.valueCelsius == nil })
-        XCTAssertTrue(ioSamples.allSatisfy { $0.source != .ioReportCandidate })
-        XCTAssertEqual(ioSamples[0].attributes["candidateSourceDisabled"], "IOAccelerator Temperature(C)")
-        XCTAssertEqual(ioSamples[1].attributes["candidateSourceDisabled"], "IOAccelerator Temperature(C)")
+        XCTAssertEqual(ioSamples.map(\.quality), [.valid, .valid])
+        XCTAssertEqual(ioSamples.map(\.source), [.ioReportCandidate, .ioReportCandidate])
+        XCTAssertEqual(ioSamples[0].rawKey, "Temperature(C)")
+        XCTAssertEqual(ioSamples[0].valueCelsius, 46.5)
+        XCTAssertEqual(ioSamples[1].valueCelsius, 46.5)
+        XCTAssertEqual(ioSamples[0].attributes["sourcePriority"], "HID Sensors,SMC,IOReport Candidate")
     }
 
     func testGPUProbeComputesAverageAcrossStatsRecognizedSensors() async {
@@ -52,7 +53,9 @@ final class DomainTemperatureProbeTests: XCTestCase {
                 "GPU MTR Temp Sensor1": 51.0,
                 "PMU tdie8": 80.0,
             ]),
-            smcReader: FakeGPUSMCReader(values: [:]),
+            smcReader: FakeGPUSMCReader(values: [
+                "Tg0G": 52.0,
+            ]),
             ioAcceleratorReader: FakeIOAcceleratorReader(reading: nil),
             catalog: AppleSiliconSensorCatalog()
         )
@@ -64,9 +67,9 @@ final class DomainTemperatureProbeTests: XCTestCase {
             TemperatureMetricName.gpuAverage,
         ])
         XCTAssertEqual(samples[0].valueCelsius, 57.0)
-        XCTAssertEqual(samples[1].valueCelsius, 54.0)
-        XCTAssertEqual(samples[0].attributes["rawKeys"], "GPU MTR Temp Sensor0,GPU MTR Temp Sensor1")
-        XCTAssertEqual(samples[1].attributes["rawKeys"], "GPU MTR Temp Sensor0,GPU MTR Temp Sensor1")
+        XCTAssertEqual(samples[1].valueCelsius, 160.0 / 3.0)
+        XCTAssertEqual(samples[0].attributes["rawKeys"], "GPU MTR Temp Sensor0,GPU MTR Temp Sensor1,Tg0G")
+        XCTAssertEqual(samples[1].attributes["rawKeys"], "GPU MTR Temp Sensor0,GPU MTR Temp Sensor1,Tg0G")
     }
 
     func testSSDProbeUsesNVMeSMARTWhenAvailable() async {
@@ -85,6 +88,28 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(samples.first?.valueCelsius, 39.5)
     }
 
+    func testSSDProbeFallsBackToNANDHIDWhenInternalSMARTDiskIsAbsent() async {
+        let probe = SSDTemperatureProbe(
+            nvmeReader: FakeNVMeReader(reading: nil, isPresent: false),
+            hidReader: FakeGPUHIDReader(values: [
+                "NAND CH0 temp": 38.0,
+                "PMU tdie8": 90.0,
+            ]),
+            smcReader: FakeGPUSMCReader(values: ["TH0x": 41.0]),
+            catalog: AppleSiliconSensorCatalog()
+        )
+
+        let samples = await probe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 75))
+
+        XCTAssertEqual(samples.count, 1)
+        XCTAssertEqual(samples.first?.quality, .valid)
+        XCTAssertEqual(samples.first?.source, .hidSensors)
+        XCTAssertEqual(samples.first?.rawKey, "NAND CH0 temp")
+        XCTAssertEqual(samples.first?.valueCelsius, 38.0)
+        XCTAssertEqual(samples.first?.attributes["sourcePriority"], "NVMe SMART,HID Sensors,SMC")
+        XCTAssertEqual(samples.first?.attributes["smartStatus"], "internalSMARTDiskUnavailable")
+    }
+
     func testBatteryProbeUsesBatteryIORegistryReading() async {
         let probe = BatteryTemperatureProbe(
             batteryReader: FakeBatteryReader(reading: BatteryTemperatureReading(valueCelsius: 31.5, ioRegistryProperty: "Temperature")),
@@ -99,6 +124,27 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(samples.first?.metricName, TemperatureMetricName.battery)
         XCTAssertEqual(samples.first?.source, .batteryIORegistry)
         XCTAssertEqual(samples.first?.valueCelsius, 31.5)
+    }
+
+    func testSystemProbeUsesStatsSystemSMCCatalogKeys() async {
+        let probe = SystemTemperatureProbe(
+            platformDetector: FakeGPUPlatformDetector(platform: .m4),
+            hidReader: FakeGPUHIDReader(values: [:]),
+            smcReader: FakeGPUSMCReader(values: [
+                "TW0P": 42.0,
+                "TL0P": 37.0,
+            ]),
+            catalog: AppleSiliconSensorCatalog()
+        )
+
+        let samples = await probe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 85))
+
+        XCTAssertEqual(samples.count, 1)
+        XCTAssertEqual(samples.first?.quality, .valid)
+        XCTAssertEqual(samples.first?.source, .smc)
+        XCTAssertEqual(samples.first?.rawKey, "TW0P")
+        XCTAssertEqual(samples.first?.valueCelsius, 42.0)
+        XCTAssertEqual(samples.first?.attributes["rawKeys"], "TL0P,TW0P")
     }
 
     func testProbesReturnStatusSamplesWhenSourceIsUnavailable() async {
@@ -146,7 +192,7 @@ final class DomainTemperatureProbeTests: XCTestCase {
             TemperatureMetricName.gpuHottest,
             TemperatureMetricName.gpuAverage,
         ])
-        XCTAssertTrue(gpuSamples.allSatisfy { $0.attributes["sourcePriority"] == "HID Sensors,SMC" })
+        XCTAssertTrue(gpuSamples.allSatisfy { $0.attributes["sourcePriority"] == "HID Sensors,SMC,IOReport Candidate" })
         XCTAssertTrue(gpuSamples.allSatisfy { $0.attributes["attemptedRawKeys"] != nil })
         XCTAssertEqual(ssdSample?.attributes["sourcePriority"], "NVMe SMART,HID Sensors,SMC")
         XCTAssertEqual(ssdSample?.attributes["smartField"], "temperature")

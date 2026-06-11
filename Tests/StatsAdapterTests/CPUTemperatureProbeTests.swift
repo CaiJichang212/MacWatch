@@ -4,7 +4,7 @@ import XCTest
 @testable import StatsAdapter
 
 final class CPUTemperatureProbeTests: XCTestCase {
-    func testProbePrefersValidHIDSensorsOverSMCFallback() async throws {
+    func testProbeAggregatesStatsRecognizedHIDAndSMCSensors() async throws {
         let sessionID = UUID()
         let timestamp = Date(timeIntervalSince1970: 10)
         let probe = CPUTemperatureProbe(
@@ -12,6 +12,7 @@ final class CPUTemperatureProbeTests: XCTestCase {
             hidReader: FakeAppleSiliconTemperatureReader(values: [
                 "pACC MTR Temp Sensor0": 61.0,
                 "eACC MTR Temp Sensor1": 54.0,
+                "PMU tdie8": 90.0,
             ]),
             smcReader: FakeSMCReader(values: [
                 "Te05": 48.0,
@@ -27,9 +28,10 @@ final class CPUTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(samples[0].source, .hidSensors)
         XCTAssertEqual(samples[0].rawKey, "pACC MTR Temp Sensor0")
         XCTAssertEqual(samples[0].valueCelsius, 61.0)
-        XCTAssertEqual(samples[0].attributes["rawKeys"], "pACC MTR Temp Sensor0,eACC MTR Temp Sensor1")
+        XCTAssertEqual(samples[0].attributes["rawKeys"], "Te05,Tp01,pACC MTR Temp Sensor0,eACC MTR Temp Sensor1")
         XCTAssertEqual(samples[1].metricName, TemperatureMetricName.cpuAverage)
-        XCTAssertEqual(samples[1].valueCelsius, 57.5)
+        XCTAssertEqual(samples[1].source, .hidSensors)
+        XCTAssertEqual(samples[1].valueCelsius, 53.0)
     }
 
     func testProbeFallsBackToSMCWhenHIDHasNoValidValues() async {

@@ -2,6 +2,11 @@ import XCTest
 @testable import StatsAdapter
 
 final class AppleSiliconSensorCatalogTests: XCTestCase {
+    func testApplePlatformParserAcceptsChipNameWithExtraSuffix() {
+        XCTAssertEqual(ApplePlatform(chipName: "Apple M4 (VirtualApple)"), .m4)
+        XCTAssertEqual(ApplePlatform(chipName: "Apple M4 Pro 12-Core"), .m4Pro)
+    }
+
     func testCatalogMapsCPUHIDSensorsToCPU() {
         let catalog = AppleSiliconSensorCatalog()
 
@@ -54,5 +59,15 @@ final class AppleSiliconSensorCatalogTests: XCTestCase {
         XCTAssertEqual(catalog.smcGPUKeys(for: .m2), ["Tg0f", "Tg0j"])
         XCTAssertEqual(catalog.smcGPUKeys(for: .m3), ["Tf14", "Tf18", "Tf19", "Tf1A", "Tf24", "Tf28", "Tf29", "Tf2A"])
         XCTAssertEqual(catalog.smcGPUKeys(for: .m5), ["Tg0U", "Tg0X", "Tg0d", "Tg0g", "Tg0j", "Tg1Y", "Tg1c", "Tg1g"])
+    }
+
+    func testCatalogExposesStatsSystemTemperatureSMCKeys() {
+        let catalog = AppleSiliconSensorCatalog()
+
+        XCTAssertTrue(catalog.smcSystemKeys().contains("TW0P"))
+        XCTAssertTrue(catalog.smcSystemKeys().contains("TL0P"))
+        XCTAssertTrue(catalog.smcSystemKeys().contains("TA0P"))
+        XCTAssertTrue(catalog.smcSystemKeys().contains("TZ0C"))
+        XCTAssertEqual(catalog.domain(forRawKey: "TW0P"), .system)
     }
 }
