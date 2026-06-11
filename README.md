@@ -75,10 +75,16 @@ git submodule update --init --recursive
 ./scripts/run.sh
 ```
 
-打包调试版 `.app`：
+打包 `.app`：
 
 ```bash
 ./scripts/package_app.sh
+```
+
+默认产物为 debug 构建；发布/资源验收使用：
+
+```bash
+./scripts/package_app.sh --configuration release
 ```
 
 读取一次温度诊断 JSON Lines：
@@ -93,13 +99,19 @@ git submodule update --init --recursive
 ./scripts/run_stage7_acceptance.sh
 ```
 
+阶段 7 默认使用 release bundle 做资源验收；需要显式切换时可传入 `--configuration debug|release`。
+
 验收摘要默认写入：
 
 ```text
 dist/stage7-summary.json
 ```
 
-分发预检依赖本机 Developer ID 证书和公证配置；缺少签名或公证凭据时，该项可能返回 `blocked`，不等同于温度主链路失败。
+分发预检依赖本机 Developer ID 证书和公证配置；缺少签名或公证凭据时，该项可能返回 `blocked`，不等同于温度主链路失败。需要指定身份或公证 profile 时可使用：
+
+```bash
+./scripts/preflight_distribution.sh --identity "Developer ID Application: Team" --notary-profile "profile-name" dist/MacWatch.app
+```
 
 ## MVP 边界
 
