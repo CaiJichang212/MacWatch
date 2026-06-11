@@ -236,7 +236,7 @@ public struct SensorTemperatureProbe: TemperatureProbe {
                 deviceID: "raw-sensor",
                 displayName: catalog.displayName(forRawKey: hottest.rawKey),
                 valueCelsius: hottest.valueCelsius,
-                source: .hidSensors,
+                source: hottest.source,
                 rawKey: hottest.rawKey,
                 attributes: [
                     "rawKeys": sensorReadings
@@ -244,7 +244,7 @@ public struct SensorTemperatureProbe: TemperatureProbe {
                         .sorted()
                         .joined(separator: ","),
                     "sourceSet": Self.sourceSet(from: sensorReadings),
-                    "sourcePriority": TemperatureSource.hidSensors.rawValue,
+                    "sourcePriority": "\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)",
                 ]
             )
         ]

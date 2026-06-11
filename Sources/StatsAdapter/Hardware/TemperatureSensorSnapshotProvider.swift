@@ -235,9 +235,6 @@ public final class StatsTemperatureSensorSnapshotProvider: StatsTemperatureSenso
         } else if catalog.smcSystemKeys().contains(rawKey) {
             domain = .system
             averageCandidate = false
-        } else if rawKey.first == "T" {
-            domain = .sensor
-            averageCandidate = false
         } else {
             return nil
         }
