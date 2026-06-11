@@ -19,6 +19,8 @@
 
 不要在 `AGENTS.md` 中重复维护完整产品规格；如发现细节冲突，以用户最新明确指令和 `docs/origin` 文档为准，并说明取舍。
 
+`README.md` 是面向开发者的项目入口和当前源码状态说明；修改工程结构、脚本或阶段状态后，如影响上手流程或验证方式，应同步更新 `README.md`。
+
 忽略目录： `docs/.del_tmp`，不要参考其内容。
 
 ## 项目边界
@@ -34,6 +36,11 @@ MVP 不应擅自混入 Post-MVP 能力，包括但不限于：资源监控、进
 - `Sources/MacWatchApp`：macOS App 入口、菜单栏、窗口、Popup、设置和 SwiftUI 展示层。
 - `Sources/MacWatchCore`：领域模型、采样调度、实时状态、会话历史、设置、趋势查询和核心业务逻辑。
 - `Sources/StatsAdapter`：对 Stats 可复用只读采集逻辑的隔离适配层。
+- `Sources/StatsAdapterIOHID`：HID Sensors 最小 Objective-C 只读桥接 target。
+- `Tests/MacWatchAppTests`：App、菜单栏、运行时、展示层和验收 CLI 相关测试。
+- `Tests/MacWatchCoreTests`：领域模型、采样、设置、会话历史、SQLite 和趋势查询测试。
+- `Tests/StatsAdapterTests`：采集适配层、传感器目录和 Stats 边界测试。
+- `scripts`：构建、测试、打包、运行、探测、阶段验收和边界扫描脚本。
 - `Vendor/Stats`：只读上游源码参考。
 - `docs`：需求、架构、计划和开发说明。
 
@@ -61,6 +68,28 @@ MVP 不应擅自混入 Post-MVP 能力，包括但不限于：资源监控、进
 - SMC privileged helper、风扇控制、SMC 写操作。
 
 `StatsAdapter` 不得写数据库、发通知、访问网络或持有 UI 状态。
+
+## 当前源码状态
+
+当前仓库是 Swift Package 工程，`Package.swift` 定义以下 target：
+
+- `MacWatchApp` executable：SwiftUI App、`AppDelegate`、菜单栏、窗口、Popup、Dashboard、兼容性页、详情页、设置页、首次启动引导和验收 CLI。
+- `MacWatchCore` library：温度领域模型、`SampleBus`、`LiveTemperatureStore`、`TemperatureScheduler`、能力检测、设置、SQLite 会话历史和趋势查询。
+- `StatsAdapter` library：CPU、GPU、内存、SSD/NAND、电池、系统温度和传感器温度 probe；只允许承载只读采集适配。
+- `StatsAdapterIOHID` target：最小 HID 只读桥接。
+
+当前实现已包含阶段 7 验收相关入口：`--probe-temperature-once`、`--acceptance-run <scenario>` 和 `scripts/run_stage7_acceptance.sh`。阶段 7 涉及真实硬件、资源、网络和分发预检；缺少 Developer ID 或公证配置时，分发预检可以是 `blocked`，不要把它误判为温度链路失败。
+
+## 常用验证命令
+
+- `./scripts/build.sh`：执行 `swift build`。
+- `./scripts/test.sh`：执行 `swift test` 后运行 `./scripts/verify_stats_boundary.sh`。
+- `./scripts/run.sh`：打包并打开调试版 `dist/MacWatch.app`。
+- `./scripts/package_app.sh`：生成 `dist/MacWatch.app`。
+- `./scripts/probe_temperature_once.sh`：执行一次真实温度探测并输出 JSON Lines。
+- `./scripts/run_stage7_acceptance.sh`：运行阶段 7 验收并输出 `dist/stage7-summary.json`。
+
+修改 Stats 边界、采集、历史、调度、设置或 UI 展示链路时，优先运行 `./scripts/test.sh`。改动涉及 App 启动、窗口、Popup、首次启动、验收 CLI、资源/网络边界或分发预检时，再运行相关验收脚本。当前环境无法验证真实硬件温度时，明确说明未覆盖真实设备读数。
 
 ## 实现原则
 
