@@ -12,7 +12,8 @@ enum AcceptanceImmediateRunner {
         case .sleepWakeSimulated:
             return runSleepWakeSynchronously()
         case .dashboardOpen, .popupOpen, .firstRunGuide,
-             .launchMainWindowOnStartEnabled, .launchMainWindowOnStartDisabled:
+             .launchMainWindowOnStartEnabled, .launchMainWindowOnStartDisabled,
+             .resourcesSteadyState:
             let startedAt = Date()
             return AcceptanceReport(
                 scenario: scenario,
@@ -321,7 +322,7 @@ enum AcceptanceImmediateRunner {
             let sleepEndedCount = events.filter { $0.eventType == .systemSleepEnded }.count
             let passed = readsAfterWake > readsBeforeSleep &&
                 sleepGapEnded &&
-                sleepEndedCount > 0
+                sleepEndedCount == 1
 
             return AcceptanceReport(
                 scenario: .sleepWakeSimulated,
@@ -382,6 +383,8 @@ enum AcceptanceImmediateRunner {
         }
         if sleepEndedCount == 0 {
             failures.append("missingSleepEndedEvent")
+        } else if sleepEndedCount > 1 {
+            failures.append("duplicateSleepEndedEvent")
         }
         return failures
     }

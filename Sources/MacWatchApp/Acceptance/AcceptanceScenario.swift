@@ -9,11 +9,13 @@ enum AcceptanceScenario: String, CaseIterable, Codable {
     case firstRunGuide = "first-run-guide"
     case launchMainWindowOnStartEnabled = "launch-main-window-on-start-enabled"
     case launchMainWindowOnStartDisabled = "launch-main-window-on-start-disabled"
+    case resourcesSteadyState = "resources-steady-state"
 
     var requiresApplicationLaunch: Bool {
         switch self {
         case .dashboardOpen, .popupOpen, .firstRunGuide,
-             .launchMainWindowOnStartEnabled, .launchMainWindowOnStartDisabled:
+             .launchMainWindowOnStartEnabled, .launchMainWindowOnStartDisabled,
+             .resourcesSteadyState:
             return true
         case .probeStatus, .trendQuery, .sleepWakeSimulated:
             return false
@@ -25,6 +27,8 @@ enum AcceptanceScenario: String, CaseIterable, Codable {
         case .launchMainWindowOnStartEnabled:
             return true
         case .launchMainWindowOnStartDisabled:
+            return false
+        case .resourcesSteadyState:
             return false
         default:
             return nil

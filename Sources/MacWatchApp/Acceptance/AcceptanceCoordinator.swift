@@ -38,7 +38,7 @@ final class AcceptanceCoordinator {
         case .dashboardOpen, .popupOpen, .firstRunGuide,
              .launchMainWindowOnStartEnabled, .launchMainWindowOnStartDisabled:
             return true
-        case .probeStatus, .trendQuery, .sleepWakeSimulated:
+        case .probeStatus, .trendQuery, .sleepWakeSimulated, .resourcesSteadyState:
             return false
         }
     }
@@ -61,6 +61,8 @@ final class AcceptanceCoordinator {
             return
         case .launchMainWindowOnStartEnabled, .launchMainWindowOnStartDisabled:
             scheduleWindowPolicyCheck()
+        case .resourcesSteadyState:
+            scheduleResourceSteadyStateCheck()
         case .probeStatus, .trendQuery, .sleepWakeSimulated:
             return
         }
@@ -111,6 +113,44 @@ final class AcceptanceCoordinator {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: task)
     }
 
+    private func scheduleResourceSteadyStateCheck() {
+        guard let scenario = activeScenario,
+              let startedAt = startedAt else {
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.resourceSteadyStateDuration()) {
+            let durationMs = Date().timeIntervalSince(startedAt) * 1_000
+            let memoryMB = Self.currentPhysicalFootprintMB()
+            let passed = memoryMB < 120
+            let report = AcceptanceReport(
+                scenario: scenario,
+                passed: passed,
+                startedAt: startedAt,
+                durationMs: durationMs,
+                metrics: [
+                    "contentReadyMs": String(format: "%.2f", durationMs),
+                    "memorySource": "physicalFootprint",
+                    "residentMemoryMB": String(format: "%.2f", memoryMB),
+                    "resourceMode": "steadyState",
+                ],
+                failures: passed ? [] : ["physicalFootprintExceedsThreshold"]
+            )
+            AcceptanceReportWriter.write(report)
+            Darwin.exit(report.passed ? 0 : 1)
+        }
+    }
+
+    private static func resourceSteadyStateDuration() -> TimeInterval {
+        guard let rawValue = ProcessInfo.processInfo.environment["MACWATCH_RESOURCE_STEADY_STATE_DURATION_SECONDS"],
+              let value = TimeInterval(rawValue),
+              value > 0 else {
+            return 14
+        }
+
+        return value
+    }
+
     func recordViewAppeared(_ view: AcceptanceView) {
         guard hasCompletedScenario == false,
               let scenario = activeScenario,
@@ -127,7 +167,7 @@ final class AcceptanceCoordinator {
         case .firstRunGuide:
             expectedView = .firstRunGuide
         case .launchMainWindowOnStartEnabled, .launchMainWindowOnStartDisabled,
-             .probeStatus, .trendQuery, .sleepWakeSimulated:
+             .probeStatus, .trendQuery, .sleepWakeSimulated, .resourcesSteadyState:
             return
         }
 
@@ -136,9 +176,11 @@ final class AcceptanceCoordinator {
         }
 
         if scenario == .firstRunGuide, lagMonitor == nil {
-            startLagMonitor()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-                self?.recordViewAppeared(view)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                self?.startLagMonitor()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                    self?.recordViewAppeared(view)
+                }
             }
             return
         }
@@ -155,7 +197,7 @@ final class AcceptanceCoordinator {
         case .firstRunGuide:
             passed = durationMs < 1_500 && lag < 100
         case .launchMainWindowOnStartEnabled, .launchMainWindowOnStartDisabled,
-             .probeStatus, .trendQuery, .sleepWakeSimulated:
+             .probeStatus, .trendQuery, .sleepWakeSimulated, .resourcesSteadyState:
             passed = false
         }
 
@@ -255,5 +297,29 @@ final class AcceptanceCoordinator {
             return 0
         }
         return Double(usage.ru_maxrss) / 1_048_576
+    }
+
+    private static func currentPhysicalFootprintMB() -> Double {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size
+        )
+
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { reboundPointer in
+                task_info(
+                    mach_task_self_,
+                    task_flavor_t(TASK_VM_INFO),
+                    reboundPointer,
+                    &count
+                )
+            }
+        }
+
+        guard result == KERN_SUCCESS else {
+            return residentMemoryMB()
+        }
+
+        return Double(info.phys_footprint) / 1_048_576
     }
 }
