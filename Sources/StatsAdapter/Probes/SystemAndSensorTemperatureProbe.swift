@@ -186,7 +186,7 @@ public struct SystemTemperatureProbe: TemperatureProbe {
     }
 
     private func isValidTemperature(_ value: Double) -> Bool {
-        value.isNaN == false && value >= 0 && value < 110
+        TemperatureSample.isValidTemperatureValue(value)
     }
 }
 
@@ -299,6 +299,6 @@ public struct SensorTemperatureProbe: TemperatureProbe {
     }
 
     private func isValidTemperature(_ value: Double) -> Bool {
-        value.isNaN == false && value >= 0 && value < 110
+        TemperatureSample.isValidTemperatureValue(value)
     }
 }

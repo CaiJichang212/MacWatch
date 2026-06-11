@@ -92,7 +92,7 @@ public struct GPUTemperatureProbe: TemperatureProbe {
     }
 
     private func isValid(_ value: Double) -> Bool {
-        value.isNaN == false && value >= 0 && value < 110
+        TemperatureSample.isValidTemperatureValue(value)
     }
 
     private func capability(from sample: TemperatureSample, sessionID: UUID, timestamp: Date) -> TemperatureCapability {

@@ -25,6 +25,22 @@ public struct SSDTemperatureProbe: TemperatureProbe {
     }
 
     public func detect(sessionID: UUID, at timestamp: Date) async -> TemperatureCapability {
+        guard nvmeReader.hasInternalSMARTCapableDisk() else {
+            return TemperatureCapability(
+                id: UUID(),
+                sessionID: sessionID,
+                domain: .ssd,
+                source: .nvmeSMART,
+                supported: false,
+                readable: false,
+                reasonCode: "internalSMARTDiskUnavailable",
+                reasonMessage: "No internal NVMe SMART-capable disk is available on this device.",
+                rawKey: nil,
+                detectedAt: timestamp,
+                updatedAt: timestamp
+            )
+        }
+
         let sample = await read(sessionID: sessionID, at: timestamp).first
         let isReadable = sample?.quality == .valid
         return TemperatureCapability(
@@ -43,7 +59,28 @@ public struct SSDTemperatureProbe: TemperatureProbe {
     }
 
     public func read(sessionID: UUID, at timestamp: Date) async -> [TemperatureSample] {
-        if let nvmeReading = nvmeReader.readInternalTemperature(), nvmeReading.valueCelsius >= 0, nvmeReading.valueCelsius < 110 {
+        guard nvmeReader.hasInternalSMARTCapableDisk() else {
+            return [
+                try! TemperatureSample.makeInvalid(
+                    sessionID: sessionID,
+                    timestamp: timestamp,
+                    metricName: TemperatureMetricName.ssdInternal,
+                    domain: .ssd,
+                    deviceID: "internal-ssd",
+                    displayName: "Internal SSD",
+                    quality: .unsupported,
+                    source: .nvmeSMART,
+                    errorCode: "internalSMARTDiskUnavailable",
+                    attributes: [
+                        "smartField": "temperature",
+                        "sourcePriority": TemperatureSource.nvmeSMART.rawValue,
+                    ]
+                )
+            ]
+        }
+
+        if let nvmeReading = nvmeReader.readInternalTemperature(),
+           TemperatureSample.isValidTemperatureValue(nvmeReading.valueCelsius) {
             return [
                 try! TemperatureSample.makeValid(
                     sessionID: sessionID,
@@ -60,7 +97,7 @@ public struct SSDTemperatureProbe: TemperatureProbe {
         }
 
         let hidValues = hidReader.readTemperatureValues().compactMap { rawKey, value -> (String, Double)? in
-            guard catalog.isSSDHIDKey(rawKey), value.isNaN == false, value >= 0, value < 110 else {
+            guard catalog.isSSDHIDKey(rawKey), TemperatureSample.isValidTemperatureValue(value) else {
                 return nil
             }
             return (rawKey, value)
@@ -82,7 +119,7 @@ public struct SSDTemperatureProbe: TemperatureProbe {
         }
 
         let smcValues = catalog.smcSSDKeys().compactMap { rawKey -> (String, Double)? in
-            guard let value = smcReader.getValue(rawKey), value.isNaN == false, value >= 0, value < 110 else {
+            guard let value = smcReader.getValue(rawKey), TemperatureSample.isValidTemperatureValue(value) else {
                 return nil
             }
             return (rawKey, value)

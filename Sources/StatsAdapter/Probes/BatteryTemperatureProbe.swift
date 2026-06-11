@@ -25,6 +25,22 @@ public struct BatteryTemperatureProbe: TemperatureProbe {
     }
 
     public func detect(sessionID: UUID, at timestamp: Date) async -> TemperatureCapability {
+        guard batteryReader.hasBatteryService() else {
+            return TemperatureCapability(
+                id: UUID(),
+                sessionID: sessionID,
+                domain: .battery,
+                source: .batteryIORegistry,
+                supported: false,
+                readable: false,
+                reasonCode: "batteryServiceUnavailable",
+                reasonMessage: "No AppleSmartBattery service is available on this device.",
+                rawKey: nil,
+                detectedAt: timestamp,
+                updatedAt: timestamp
+            )
+        }
+
         let sample = await read(sessionID: sessionID, at: timestamp).first
         let isReadable = sample?.quality == .valid
         return TemperatureCapability(
@@ -43,7 +59,28 @@ public struct BatteryTemperatureProbe: TemperatureProbe {
     }
 
     public func read(sessionID: UUID, at timestamp: Date) async -> [TemperatureSample] {
-        if let batteryReading = batteryReader.readTemperature(), batteryReading.valueCelsius >= 0, batteryReading.valueCelsius < 110 {
+        guard batteryReader.hasBatteryService() else {
+            return [
+                try! TemperatureSample.makeInvalid(
+                    sessionID: sessionID,
+                    timestamp: timestamp,
+                    metricName: TemperatureMetricName.battery,
+                    domain: .battery,
+                    deviceID: "battery-pack",
+                    displayName: "Battery",
+                    quality: .unsupported,
+                    source: .batteryIORegistry,
+                    errorCode: "batteryServiceUnavailable",
+                    attributes: [
+                        "ioRegistryService": "AppleSmartBattery",
+                        "ioRegistryProperty": "Temperature",
+                    ]
+                )
+            ]
+        }
+
+        if let batteryReading = batteryReader.readTemperature(),
+           TemperatureSample.isValidTemperatureValue(batteryReading.valueCelsius) {
             return [
                 try! TemperatureSample.makeValid(
                     sessionID: sessionID,
@@ -60,7 +97,10 @@ public struct BatteryTemperatureProbe: TemperatureProbe {
         }
 
         let hidValue = hidReader.readTemperatureValues()
-            .first { $0.key.localizedCaseInsensitiveContains("gas gauge battery") && $0.value.isNaN == false && $0.value >= 0 && $0.value < 110 }
+            .first {
+                $0.key.localizedCaseInsensitiveContains("gas gauge battery")
+                    && TemperatureSample.isValidTemperatureValue($0.value)
+            }
         if let hidValue {
             return [
                 try! TemperatureSample.makeValid(
@@ -78,7 +118,7 @@ public struct BatteryTemperatureProbe: TemperatureProbe {
         }
 
         let smcValues = catalog.smcBatteryKeys().compactMap { rawKey -> (String, Double)? in
-            guard let value = smcReader.getValue(rawKey), value.isNaN == false, value >= 0, value < 110 else {
+            guard let value = smcReader.getValue(rawKey), TemperatureSample.isValidTemperatureValue(value) else {
                 return nil
             }
             return (rawKey, value)

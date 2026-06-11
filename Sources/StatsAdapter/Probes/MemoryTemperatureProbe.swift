@@ -22,6 +22,22 @@ public struct MemoryTemperatureProbe: TemperatureProbe {
     }
 
     public func detect(sessionID: UUID, at timestamp: Date) async -> TemperatureCapability {
+        guard platformDetector.detect() != nil else {
+            return TemperatureCapability(
+                id: UUID(),
+                sessionID: sessionID,
+                domain: .memory,
+                source: .smc,
+                supported: false,
+                readable: false,
+                reasonCode: "platformUnsupported",
+                reasonMessage: "Memory temperature sensor keys are unavailable for this platform.",
+                rawKey: nil,
+                detectedAt: timestamp,
+                updatedAt: timestamp
+            )
+        }
+
         let sample = await read(sessionID: sessionID, at: timestamp).first
         let isReadable = sample?.quality == .valid
         return TemperatureCapability(
@@ -40,9 +56,28 @@ public struct MemoryTemperatureProbe: TemperatureProbe {
     }
 
     public func read(sessionID: UUID, at timestamp: Date) async -> [TemperatureSample] {
-        let platform = platformDetector.detect() ?? .intel
+        guard let platform = platformDetector.detect() else {
+            return [
+                try! TemperatureSample.makeInvalid(
+                    sessionID: sessionID,
+                    timestamp: timestamp,
+                    metricName: TemperatureMetricName.memoryProximity,
+                    domain: .memory,
+                    deviceID: "memory-package",
+                    displayName: "Memory Proximity",
+                    quality: .unsupported,
+                    source: .smc,
+                    errorCode: "platformUnsupported",
+                    attributes: [
+                        "readerError": "platformUnsupported",
+                        "sourcePriority": TemperatureSource.smc.rawValue,
+                    ]
+                )
+            ]
+        }
+
         let readings = catalog.smcMemoryKeys(for: platform).compactMap { rawKey -> (String, Double)? in
-            guard let value = smcReader.getValue(rawKey), value.isNaN == false, value >= 0, value < 110 else {
+            guard let value = smcReader.getValue(rawKey), TemperatureSample.isValidTemperatureValue(value) else {
                 return nil
             }
             return (rawKey, value)

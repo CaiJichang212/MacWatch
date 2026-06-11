@@ -207,7 +207,7 @@ public struct CPUTemperatureProbe: TemperatureProbe {
     }
 
     private func isValidTemperature(_ value: Double) -> Bool {
-        value.isNaN == false && value >= 0 && value < 110
+        TemperatureSample.isValidTemperatureValue(value)
     }
 
     private func makeCapability(
