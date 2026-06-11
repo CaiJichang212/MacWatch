@@ -108,14 +108,19 @@ public struct SystemTemperatureProbe: TemperatureProbe {
 
     private func allSMCKeys() -> [String] {
         let platform = platformDetector.detect() ?? .intel
+        let statsTemperatureKeys = smcReader
+            .getAllKeys()
+            .filter(catalog.isStatsTemperatureSMCKey)
         return Array(
             Set(
                 catalog.smcCPUKeys(for: platform)
                     + catalog.smcGPUKeys(for: platform)
                     + catalog.smcSSDKeys()
                     + catalog.smcBatteryKeys()
+                    + catalog.smcSystemKeys()
+                    + statsTemperatureKeys
             )
-        )
+        ).sorted()
     }
 
     private func hottestReading(

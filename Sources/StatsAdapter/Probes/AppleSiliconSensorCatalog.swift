@@ -24,6 +24,9 @@ public struct AppleSiliconSensorCatalog: Sendable {
         if smcBatteryKeySet.contains(rawKey) {
             return .battery
         }
+        if smcSystemKeySet.contains(rawKey) {
+            return .system
+        }
         return nil
     }
 
@@ -104,6 +107,19 @@ public struct AppleSiliconSensorCatalog: Sendable {
         ["TB1T", "TB2T"]
     }
 
+    public func smcSystemKeys() -> [String] {
+        Self.statsSystemSMCKeys
+    }
+
+    public func isStatsTemperatureSMCKey(_ rawKey: String) -> Bool {
+        smcCPUKeySet.contains(rawKey)
+            || smcGPUKeySet.contains(rawKey)
+            || smcSSDKeySet.contains(rawKey)
+            || smcBatteryKeySet.contains(rawKey)
+            || smcSystemKeySet.contains(rawKey)
+            || rawKey.first == "T"
+    }
+
     private func sensorIndex(in rawKey: String) -> Int? {
         let digits = rawKey.reversed().prefix { $0.isNumber }.reversed()
         guard digits.isEmpty == false else {
@@ -160,4 +176,41 @@ public struct AppleSiliconSensorCatalog: Sendable {
     private let smcBatteryKeySet: Set<String> = [
         "TB1T", "TB2T",
     ]
+    private static let statsSystemSMCKeys: [String] = {
+        let wildcardKeys = [
+            "TA%P",
+            "Th%H",
+            "TZ%C",
+            "TI%P",
+            "TH%A",
+            "TH%B",
+            "TH%C",
+        ].flatMap(Self.expandSMCWildcard)
+
+        return Array(Set(wildcardKeys + [
+            "Tm0P",
+            "Tp0P",
+            "TW0P",
+            "TL0P",
+            "TTLD",
+            "TTRD",
+            "TN0D",
+            "TN0H",
+            "TN0P",
+            "TaLP",
+            "TaRF",
+        ])).sorted()
+    }()
+    private static let statsSystemSMCKeySet: Set<String> = Set(statsSystemSMCKeys)
+
+    private var smcSystemKeySet: Set<String> {
+        Self.statsSystemSMCKeySet
+    }
+
+    private static func expandSMCWildcard(_ pattern: String) -> [String] {
+        guard pattern.contains("%") else {
+            return [pattern]
+        }
+        return (0...9).map { pattern.replacingOccurrences(of: "%", with: "\($0)") }
+    }
 }

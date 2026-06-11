@@ -43,15 +43,7 @@ public struct GPUTemperatureProbe: TemperatureProbe {
                 }
                 return (rawKey, value)
             }
-        if let hottest = hidReadings.max(by: { $0.1 < $1.1 }) {
-            return makeValidSamples(
-                sessionID: sessionID,
-                timestamp: timestamp,
-                readings: hidReadings,
-                hottest: hottest,
-                source: .hidSensors
-            )
-        }
+            .sorted { $0.0 < $1.0 }
 
         let platform = platformDetector.detect() ?? .intel
         let smcReadings = catalog.smcGPUKeys(for: platform).compactMap { rawKey -> (String, Double)? in
@@ -60,20 +52,31 @@ public struct GPUTemperatureProbe: TemperatureProbe {
             }
             return (rawKey, value)
         }
-        if let hottest = smcReadings.max(by: { $0.1 < $1.1 }) {
+
+        let statsSensorReadings = hidReadings + smcReadings
+        if let hottest = statsSensorReadings.max(by: { $0.1 < $1.1 }) {
             return makeValidSamples(
                 sessionID: sessionID,
                 timestamp: timestamp,
-                readings: smcReadings,
+                readings: statsSensorReadings,
                 hottest: hottest,
-                source: .smc
+                source: hidReadings.contains(where: { $0.0 == hottest.0 }) ? .hidSensors : .smc
+            )
+        }
+
+        if let ioAcceleratorReading = ioAcceleratorReader.readTemperature(),
+           isValid(ioAcceleratorReading.valueCelsius) {
+            return makeIOAcceleratorSamples(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                reading: ioAcceleratorReading
             )
         }
 
         return unavailableSamples(
             sessionID: sessionID,
             timestamp: timestamp,
-            ioAcceleratorCandidate: ioAcceleratorReader.readTemperature()
+            ioAcceleratorCandidate: nil
         )
     }
 
@@ -113,6 +116,44 @@ public struct GPUTemperatureProbe: TemperatureProbe {
                 valueCelsius: average,
                 source: source,
                 attributes: ["rawKeys": rawKeys]
+            ),
+        ]
+    }
+
+    private func makeIOAcceleratorSamples(
+        sessionID: UUID,
+        timestamp: Date,
+        reading: IOAcceleratorTemperatureReading
+    ) -> [TemperatureSample] {
+        let attributes = [
+            "rawKeys": reading.statisticsField,
+            "sourcePriority": "\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue),\(TemperatureSource.ioReportCandidate.rawValue)",
+        ]
+
+        return [
+            try! TemperatureSample.makeValid(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                metricName: TemperatureMetricName.gpuHottest,
+                domain: .gpu,
+                deviceID: "gpu-die",
+                displayName: "GPU Hottest",
+                valueCelsius: reading.valueCelsius,
+                source: .ioReportCandidate,
+                rawKey: reading.statisticsField,
+                attributes: attributes
+            ),
+            try! TemperatureSample.makeValid(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                metricName: TemperatureMetricName.gpuAverage,
+                domain: .gpu,
+                deviceID: "gpu-die",
+                displayName: "GPU Average",
+                valueCelsius: reading.valueCelsius,
+                source: .ioReportCandidate,
+                rawKey: reading.statisticsField,
+                attributes: attributes
             ),
         ]
     }
@@ -159,7 +200,7 @@ public struct GPUTemperatureProbe: TemperatureProbe {
         var attributes = [
             "attemptedRawKeys": catalog.smcGPUKeys(for: platform).joined(separator: ","),
             "readerError": "temperatureUnavailable",
-            "sourcePriority": "\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)",
+            "sourcePriority": "\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue),\(TemperatureSource.ioReportCandidate.rawValue)",
         ]
 
         if let ioAcceleratorCandidate {

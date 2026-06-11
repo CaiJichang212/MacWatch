@@ -99,30 +99,11 @@ public struct CPUTemperatureProbe: TemperatureProbe {
     }
 
     public func read(sessionID: UUID, at timestamp: Date) async -> [TemperatureSample] {
-        let hidReadings = hidCPUReadings()
-        let chosenReadings: [RawTemperatureReading]
-        let winningSource: TemperatureSource
+        let smcReadings = smcCPUReadings()
+        let hidReadings = hidCPUReadings().sorted(by: isPreferred(lhs:rhs:))
+        let chosenReadings = smcReadings + hidReadings
 
-        if hidReadings.isEmpty == false {
-            chosenReadings = hidReadings
-            winningSource = .hidSensors
-        } else {
-            let smcReadings = smcCPUReadings()
-            if smcReadings.isEmpty == false {
-                chosenReadings = smcReadings
-                winningSource = .smc
-            } else {
-                return makeReadFailedSamples(
-                    sessionID: sessionID,
-                    timestamp: timestamp,
-                    availableHIDKeys: hidReader.readTemperatureValues().keys.sorted(),
-                    availableSMCKeys: smcReader.getAllKeys()
-                )
-            }
-        }
-
-        let sortedReadings = chosenReadings.sorted(by: isPreferred(lhs:rhs:))
-        guard let hottest = sortedReadings.max(by: { $0.valueCelsius < $1.valueCelsius }) else {
+        guard chosenReadings.isEmpty == false else {
             return makeReadFailedSamples(
                 sessionID: sessionID,
                 timestamp: timestamp,
@@ -131,8 +112,17 @@ public struct CPUTemperatureProbe: TemperatureProbe {
             )
         }
 
-        let rawKeys = sortedReadings.map(\.rawKey).joined(separator: ",")
-        let average = sortedReadings.map(\.valueCelsius).reduce(0, +) / Double(sortedReadings.count)
+        guard let hottest = chosenReadings.max(by: { $0.valueCelsius < $1.valueCelsius }) else {
+            return makeReadFailedSamples(
+                sessionID: sessionID,
+                timestamp: timestamp,
+                availableHIDKeys: hidReader.readTemperatureValues().keys.sorted(),
+                availableSMCKeys: smcReader.getAllKeys()
+            )
+        }
+
+        let rawKeys = chosenReadings.map(\.rawKey).joined(separator: ",")
+        let average = chosenReadings.map(\.valueCelsius).reduce(0, +) / Double(chosenReadings.count)
         return [
             try! TemperatureSample.makeValid(
                 sessionID: sessionID,
@@ -142,7 +132,7 @@ public struct CPUTemperatureProbe: TemperatureProbe {
                 deviceID: "cpu-package",
                 displayName: "CPU Hottest",
                 valueCelsius: hottest.valueCelsius,
-                source: winningSource,
+                source: hottest.source,
                 rawKey: hottest.rawKey,
                 attributes: [
                     "rawKeys": rawKeys,
@@ -157,7 +147,7 @@ public struct CPUTemperatureProbe: TemperatureProbe {
                 deviceID: "cpu-package",
                 displayName: "CPU Average",
                 valueCelsius: average,
-                source: winningSource,
+                source: hottest.source,
                 attributes: [
                     "rawKeys": rawKeys,
                     "sourcePriority": "\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)",

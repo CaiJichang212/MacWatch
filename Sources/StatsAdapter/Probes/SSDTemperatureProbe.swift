@@ -25,33 +25,18 @@ public struct SSDTemperatureProbe: TemperatureProbe {
     }
 
     public func detect(sessionID: UUID, at timestamp: Date) async -> TemperatureCapability {
-        guard nvmeReader.hasInternalSMARTCapableDisk() else {
-            return TemperatureCapability(
-                id: UUID(),
-                sessionID: sessionID,
-                domain: .ssd,
-                source: .nvmeSMART,
-                supported: false,
-                readable: false,
-                reasonCode: "internalSMARTDiskUnavailable",
-                reasonMessage: "No internal NVMe SMART-capable disk is available on this device.",
-                rawKey: nil,
-                detectedAt: timestamp,
-                updatedAt: timestamp
-            )
-        }
-
         let sample = await read(sessionID: sessionID, at: timestamp).first
         let isReadable = sample?.quality == .valid
+        let isUnsupported = sample?.quality == .unsupported
         return TemperatureCapability(
             id: UUID(),
             sessionID: sessionID,
             domain: .ssd,
             source: sample?.source ?? .nvmeSMART,
-            supported: true,
+            supported: isReadable || isUnsupported == false,
             readable: isReadable,
             reasonCode: isReadable ? "ok" : sample?.errorCode ?? "noReadableTemperature",
-            reasonMessage: isReadable ? "ok" : "No readable internal SSD temperature from NVMe SMART, HID Sensors, or SMC.",
+            reasonMessage: ssdReasonMessage(isReadable: isReadable, sample: sample),
             rawKey: sample?.rawKey,
             detectedAt: timestamp,
             updatedAt: timestamp
@@ -59,27 +44,10 @@ public struct SSDTemperatureProbe: TemperatureProbe {
     }
 
     public func read(sessionID: UUID, at timestamp: Date) async -> [TemperatureSample] {
-        guard nvmeReader.hasInternalSMARTCapableDisk() else {
-            return [
-                try! TemperatureSample.makeInvalid(
-                    sessionID: sessionID,
-                    timestamp: timestamp,
-                    metricName: TemperatureMetricName.ssdInternal,
-                    domain: .ssd,
-                    deviceID: "internal-ssd",
-                    displayName: "Internal SSD",
-                    quality: .unsupported,
-                    source: .nvmeSMART,
-                    errorCode: "internalSMARTDiskUnavailable",
-                    attributes: [
-                        "smartField": "temperature",
-                        "sourcePriority": TemperatureSource.nvmeSMART.rawValue,
-                    ]
-                )
-            ]
-        }
+        let hasInternalSMARTDisk = nvmeReader.hasInternalSMARTCapableDisk()
 
-        if let nvmeReading = nvmeReader.readInternalTemperature(),
+        if hasInternalSMARTDisk,
+           let nvmeReading = nvmeReader.readInternalTemperature(),
            TemperatureSample.isValidTemperatureValue(nvmeReading.valueCelsius) {
             return [
                 try! TemperatureSample.makeValid(
@@ -91,7 +59,10 @@ public struct SSDTemperatureProbe: TemperatureProbe {
                     displayName: "Internal SSD",
                     valueCelsius: nvmeReading.valueCelsius,
                     source: .nvmeSMART,
-                    attributes: ["smartField": nvmeReading.smartField]
+                    attributes: [
+                        "smartField": nvmeReading.smartField,
+                        "sourcePriority": sourcePriority,
+                    ]
                 )
             ]
         }
@@ -113,7 +84,8 @@ public struct SSDTemperatureProbe: TemperatureProbe {
                     displayName: "Internal SSD",
                     valueCelsius: hottest.1,
                     source: .hidSensors,
-                    rawKey: hottest.0
+                    rawKey: hottest.0,
+                    attributes: fallbackAttributes(hasInternalSMARTDisk: hasInternalSMARTDisk)
                 )
             ]
         }
@@ -135,11 +107,14 @@ public struct SSDTemperatureProbe: TemperatureProbe {
                     displayName: "Internal SSD",
                     valueCelsius: hottest.1,
                     source: .smc,
-                    rawKey: hottest.0
+                    rawKey: hottest.0,
+                    attributes: fallbackAttributes(hasInternalSMARTDisk: hasInternalSMARTDisk)
                 )
             ]
         }
 
+        let quality: TemperatureQuality = hasInternalSMARTDisk ? .readFailed : .unsupported
+        let errorCode = hasInternalSMARTDisk ? "noReadableTemperature" : "internalSMARTDiskUnavailable"
         return [
             try! TemperatureSample.makeInvalid(
                 sessionID: sessionID,
@@ -148,16 +123,39 @@ public struct SSDTemperatureProbe: TemperatureProbe {
                 domain: .ssd,
                 deviceID: "internal-ssd",
                 displayName: "Internal SSD",
-                quality: .readFailed,
+                quality: quality,
                 source: .nvmeSMART,
-                errorCode: "noReadableTemperature",
+                errorCode: errorCode,
                 attributes: [
                     "attemptedRawKeys": catalog.smcSSDKeys().joined(separator: ","),
                     "readerError": "temperatureUnavailable",
                     "smartField": "temperature",
-                    "sourcePriority": "\(TemperatureSource.nvmeSMART.rawValue),\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)",
+                    "smartStatus": hasInternalSMARTDisk ? "available" : "internalSMARTDiskUnavailable",
+                    "sourcePriority": sourcePriority,
                 ]
             )
         ]
+    }
+
+    private var sourcePriority: String {
+        "\(TemperatureSource.nvmeSMART.rawValue),\(TemperatureSource.hidSensors.rawValue),\(TemperatureSource.smc.rawValue)"
+    }
+
+    private func fallbackAttributes(hasInternalSMARTDisk: Bool) -> [String: String] {
+        [
+            "smartField": "temperature",
+            "smartStatus": hasInternalSMARTDisk ? "readFailed" : "internalSMARTDiskUnavailable",
+            "sourcePriority": sourcePriority,
+        ]
+    }
+
+    private func ssdReasonMessage(isReadable: Bool, sample: TemperatureSample?) -> String {
+        if isReadable {
+            return "ok"
+        }
+        if sample?.quality == .unsupported {
+            return "No internal NVMe SMART-capable disk is available and no NAND HID/SMC temperature fallback was readable."
+        }
+        return "No readable internal SSD temperature from NVMe SMART, HID Sensors, or SMC."
     }
 }
