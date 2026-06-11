@@ -1,0 +1,2 @@
+3ada30fd32451bfdadb9a2c42ec36e51fc37b3634ef1d3d18d3dd334b5b695c1  dist/MacWatch-v0.1.0-friends-test.zip
+d05b299685d2e77b88222d6c78e15b2c7e7962aaa540a309f025ae9096588c0f  dist/MacWatch-v0.1.0-friends-test.dmg

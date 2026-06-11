@@ -71,6 +71,7 @@ fastlane/test_output
 *.pkg
 *.dSYM.zip
 *.dSYM
+*.zip
 
 # 编辑器
 .vscode/

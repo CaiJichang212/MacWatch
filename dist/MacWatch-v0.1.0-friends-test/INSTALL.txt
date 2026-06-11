@@ -1,0 +1,23 @@
+MacWatch v0.1.0 朋友测试版安装说明
+
+这是未使用 Apple Developer ID 签名、未经过 Apple 公证的小范围测试包。
+应用本身已做 ad-hoc 签名并通过本机 codesign 校验，但 macOS Gatekeeper 仍会提示“无法验证开发者”。
+
+安装方式：
+
+1. 解压 zip，或打开 dmg。
+2. 将 MacWatch.app 拖到“应用程序”文件夹。
+3. 第一次打开时，如果 macOS 阻止启动：
+   - 在 Finder 中右键点击 MacWatch.app。
+   - 选择“打开”。
+   - 在弹窗中再次选择“打开”。
+
+如果仍然打不开，可以在“终端”执行下面命令后再打开：
+
+xattr -dr com.apple.quarantine /Applications/MacWatch.app
+
+注意事项：
+
+- 本包面向 Apple Silicon Mac，最低系统版本 macOS 13。
+- 这是本地温度监控测试版，不需要联网，也不会上传数据。
+- 未公证测试包只建议发给你信任的测试朋友，不建议公开面向陌生用户发布。
