@@ -7,6 +7,7 @@ public struct BatteryTemperatureReading: Equatable, Sendable {
 }
 
 public protocol BatteryTemperatureReadingSource: Sendable {
+    func hasBatteryService() -> Bool
     func readTemperature() -> BatteryTemperatureReading?
 }
 
@@ -20,6 +21,15 @@ public final class BatteryTemperatureIORegistryReader: BatteryTemperatureReading
     ) {
         self.serviceName = serviceName
         self.propertyName = propertyName
+    }
+
+    public func hasBatteryService() -> Bool {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching(serviceName))
+        guard service != 0 else {
+            return false
+        }
+        IOObjectRelease(service)
+        return true
     }
 
     public func readTemperature() -> BatteryTemperatureReading? {

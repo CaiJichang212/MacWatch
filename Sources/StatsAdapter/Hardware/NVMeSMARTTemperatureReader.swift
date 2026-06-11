@@ -9,11 +9,20 @@ public struct NVMeSMARTTemperatureReading: Equatable, Sendable {
 }
 
 public protocol NVMeSMARTTemperatureReadingSource: Sendable {
+    func hasInternalSMARTCapableDisk() -> Bool
     func readInternalTemperature() -> NVMeSMARTTemperatureReading?
 }
 
 public final class NVMeSMARTTemperatureReader: NVMeSMARTTemperatureReadingSource {
     public init() {}
+
+    public func hasInternalSMARTCapableDisk() -> Bool {
+        guard let service = firstSMARTCapableInternalDisk() else {
+            return false
+        }
+        IOObjectRelease(service)
+        return true
+    }
 
     public func readInternalTemperature() -> NVMeSMARTTemperatureReading? {
         guard let service = firstSMARTCapableInternalDisk() else {
