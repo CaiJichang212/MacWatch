@@ -89,5 +89,10 @@ fastlane/test_output
 .env
 .env.local
 
+# Codex / OpenSpec 本地工具运行时
+.codex/openspec-runtime/
+.codex/openspec/
+.codex/skills/openspec-*
+
 # Vendor 子模块
 # (Vendor/Stats 目录下的 .gitignore 由子模块自身管理)

@@ -59,6 +59,7 @@ MacWatch/
 - Xcode Command Line Tools。
 - Swift 5.9 toolchain。
 - 已初始化 `Vendor/Stats` submodule。
+- 如需启用 OpenSpec，需要 Node.js 20.19.0 或以上，以及可用的 `npm`。
 
 初始化 submodule：
 
@@ -118,6 +119,49 @@ swift test --filter TemperatureSchedulerTests/testName
 ```bash
 ./scripts/run_stage7_acceptance.sh
 ```
+
+管理当前仓库的 OpenSpec（面向 Codex）：
+
+```bash
+./scripts/openspec.sh enable
+./scripts/openspec.sh disable
+./scripts/openspec.sh status
+./scripts/openspec.sh update
+```
+
+说明：
+
+- `enable` 会在仓库内安装或更新 OpenSpec CLI runtime，并为 Codex 生成当前仓库的 OpenSpec skills 和 slash command prompts。
+- `disable` 会移除当前仓库注入到 Codex 的 OpenSpec skills 和 prompts，不会删除仓库内保存的 OpenSpec 配置与产物。
+- `status` 用于查看当前仓库 OpenSpec 是否已安装、是否已启用，以及全局 prompt 挂载位置。
+- `update` 会更新本地 OpenSpec runtime 到最新版本，并重新生成当前仓库的 OpenSpec 指令文件。
+
+OpenSpec 精简使用指南：
+
+- OpenSpec 适合先对齐“做什么、为什么、怎么做、分几步做”，再进入实现；不适合拿来替代所有日常小改动。
+- 当前仓库启用的是 OpenSpec `core` 流程，常用能力只有 5 个：`explore`、`propose`、`apply`、`sync`、`archive`。
+- 在 Codex 里通常直接使用 slash commands：`/opsx:explore`、`/opsx:propose`、`/opsx:apply`、`/opsx:sync`、`/opsx:archive`。
+
+什么时候用什么：
+
+- 需求还没想清楚，用 `/opsx:explore`
+  例：想重新梳理 `system.temperature.hottest` 和 `sensor.temperature.raw` 的展示关系，但还没决定 UI 和状态文案怎么设计。
+- 已经知道要做什么，但还没拆出方案和任务，用 `/opsx:propose <change-name>`
+  例：`/opsx:propose add-ssd-trend-detail`，先生成 proposal、design 和 tasks，再评审是否进入实现。
+- 方案和任务已经有了，要开始改代码，用 `/opsx:apply <change-name>`
+  例：`/opsx:apply add-ssd-trend-detail`，按 tasks 逐项改 `Sources/MacWatchApp`、`Sources/MacWatchCore` 和对应测试。
+- 变更里的规格增量要合回主 specs，但还不准备归档，用 `/opsx:sync <change-name>`
+  例：把“菜单栏默认显示指标”的规格更新同步回 `openspec/specs/`，但实现还在继续。
+- 这一轮需求已经完成，要正式收口，用 `/opsx:archive <change-name>`
+  例：某次 Dashboard 温度详情改造已经完成实现、测试和规格同步后，归档该 change。
+
+一句话判断：
+
+- 不确定要不要做、怎么做：`explore`
+- 确定要做，但还没形成正式变更：`propose`
+- 正式开始写代码：`apply`
+- 只想同步规格，不想结束 change：`sync`
+- 这一轮做完了：`archive`
 
 阶段 7 默认使用 release bundle 做资源验收；需要显式切换或指定摘要路径时可传入：
 
