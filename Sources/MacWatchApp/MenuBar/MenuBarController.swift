@@ -19,28 +19,30 @@ final class MenuBarController: NSObject {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
-        let popupView = MenuBarPopupView(
-            openDashboard: { [weak self] in
-                self?.closePopover()
-                openDashboard()
-            },
-            openCompatibility: { [weak self] in
-                self?.closePopover()
-                openCompatibility()
-            },
-            openSettings: { [weak self] in
-                self?.closePopover()
-                openSettings()
-            },
-            quitApplication: { [weak self] in
-                self?.closePopover()
-                quitApplication()
-            }
-        )
+        let popupView = RuntimeLocalizedRoot {
+            MenuBarPopupView(
+                openDashboard: { [weak self] in
+                    self?.closePopover()
+                    openDashboard()
+                },
+                openCompatibility: { [weak self] in
+                    self?.closePopover()
+                    openCompatibility()
+                },
+                openSettings: { [weak self] in
+                    self?.closePopover()
+                    openSettings()
+                },
+                quitApplication: { [weak self] in
+                    self?.closePopover()
+                    quitApplication()
+                }
+            )
+        }
         .environmentObject(runtime)
 
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 360, height: 420)
+        popover.contentSize = NSSize(width: 320, height: 392)
         popover.contentViewController = NSHostingController(rootView: popupView)
 
         configureStatusItem()

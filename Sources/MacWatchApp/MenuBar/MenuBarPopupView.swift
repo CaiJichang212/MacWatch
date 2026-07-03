@@ -4,22 +4,18 @@ import SwiftUI
 struct MenuBarPopupRowModel: Identifiable, Equatable {
     let id: TemperatureDomain
     let title: String
-    let sourceText: String
-    let updatedAtText: String
-    let valueText: String
+    let valueText: String?
     let averageValueText: String?
-    let statusText: String
-    let isPrimaryValue: Bool
+    let statusText: String?
+    let reasonText: String?
 
     init(row: TemperatureOverviewSnapshot.Row) {
         id = row.domain
         title = row.title
-        sourceText = "Source: \(row.sourceText)"
-        updatedAtText = "Updated: \(row.updatedAtText)"
-        valueText = row.valueText
+        valueText = row.primaryValueText
         averageValueText = row.averageValueText
-        statusText = row.statusText
-        isPrimaryValue = row.statusText == "Valid"
+        statusText = row.abnormalStatusText
+        reasonText = row.reasonText
     }
 }
 
@@ -32,44 +28,55 @@ struct MenuBarPopupView: View {
     let quitApplication: () -> Void
 
     var body: some View {
+        let localizer = runtime.localizer
         let snapshot = TemperatureOverviewSnapshot(
             liveState: runtime.liveState,
-            settings: runtime.settings
+            settings: runtime.settings,
+            localizer: localizer
         )
         let rows = snapshot.rows.map(MenuBarPopupRowModel.init)
+        let updatedAtText = TemperatureTimestampFormatter.shortTimeText(snapshot.updatedAt, locale: localizer.locale)
 
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(snapshot.hottestValueText)
-                .font(.system(size: 28, weight: .semibold, design: .rounded))
-            Text("Current hottest")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 32, weight: .semibold, design: .rounded))
+            HStack(spacing: 10) {
+                Text(localizer.string("popup.currentHottest"))
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(localizer.string("popup.updated", updatedAtText))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             Divider()
 
             ForEach(rows) { row in
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .top, spacing: 12) {
                         Text(row.title)
                             .font(.subheadline.weight(.medium))
-                        Text(row.sourceText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(row.updatedAtText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(row.valueText)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(row.isPrimaryValue ? .primary : .secondary)
-                        if let averageValueText = row.averageValueText {
-                            Text("Avg \(averageValueText)")
-                                .font(.caption)
+                        Spacer()
+                        if let valueText = row.valueText {
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(valueText)
+                                    .font(.subheadline.weight(.semibold))
+                                if let averageValueText = row.averageValueText {
+                                    Text(localizer.string("popup.average", averageValueText))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        } else if let statusText = row.statusText {
+                            Text(statusText)
+                                .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                         }
-                        Text(row.statusText)
+                    }
+
+                    if let reasonText = row.reasonText {
+                        Text(reasonText)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -79,16 +86,16 @@ struct MenuBarPopupView: View {
             Divider()
 
             HStack {
-                Button("Dashboard", action: openDashboard)
-                Button("Compatibility", action: openCompatibility)
+                Button(localizer.string("popup.dashboard"), action: openDashboard)
+                Button(localizer.string("popup.compatibility"), action: openCompatibility)
                 Spacer()
-                Button("Settings", action: openSettings)
-                Button("Quit", role: .destructive, action: quitApplication)
+                Button(localizer.string("popup.settings"), action: openSettings)
+                Button(localizer.string("popup.quit"), role: .destructive, action: quitApplication)
             }
             .buttonStyle(.borderless)
         }
-        .padding(14)
-        .frame(width: 360)
+        .padding(12)
+        .frame(width: 320)
         .onAppear {
             AcceptanceCoordinator.shared.recordViewAppeared(.popup)
         }
