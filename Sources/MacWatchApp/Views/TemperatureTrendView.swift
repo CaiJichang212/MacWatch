@@ -7,6 +7,7 @@ struct TemperatureTrendView: View {
     let series: TemperatureSeries?
     let fallbackText: String
     let unit: TemperatureUnit
+    let localizer: AppLocalizer
 
     @State private var highlightedSample: TemperatureSample?
 
@@ -72,7 +73,7 @@ struct TemperatureTrendView: View {
 
                 if let highlightedSample {
                     HStack {
-                        Text(Self.timeFormatter.string(from: highlightedSample.timestamp))
+                        Text(Self.timeFormatter(locale: localizer.locale).string(from: highlightedSample.timestamp))
                         if let valueCelsius = highlightedSample.valueCelsius {
                             Text(TemperatureFormatter.text(celsius: valueCelsius, unit: unit))
                         }
@@ -82,7 +83,7 @@ struct TemperatureTrendView: View {
                 }
 
                 if series.gaps.isEmpty == false {
-                    Text("Trend contains gaps caused by sleep, stale data, or read failures.")
+                    Text(localizer.string("trend.gaps"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -110,12 +111,13 @@ struct TemperatureTrendView: View {
         }
     }
 
-    private static let timeFormatter: DateFormatter = {
+    private static func timeFormatter(locale: Locale) -> DateFormatter {
         let formatter = DateFormatter()
+        formatter.locale = locale
         formatter.timeStyle = .short
         formatter.dateStyle = .none
         return formatter
-    }()
+    }
 }
 
 enum TemperatureTrendSegments {

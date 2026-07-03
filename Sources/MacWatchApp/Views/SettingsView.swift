@@ -6,10 +6,12 @@ struct SettingsView: View {
     @State private var isShowingClearConfirmation = false
 
     var body: some View {
+        let localizer = runtime.localizer
+
         Form {
-            Section("General") {
+            Section(localizer.string("settings.general")) {
                 Toggle(
-                    "Launch main window on start",
+                    localizer.string("settings.launchMainWindowOnStart"),
                     isOn: Binding(
                         get: { runtime.settings.launchMainWindowOnStart },
                         set: { value in
@@ -17,11 +19,25 @@ struct SettingsView: View {
                         }
                     )
                 )
+
+                Picker(
+                    localizer.string("settings.language"),
+                    selection: Binding(
+                        get: { runtime.settings.language },
+                        set: { value in
+                            runtime.updateSettings { $0.language = value }
+                        }
+                    )
+                ) {
+                    Text(localizer.languageLabel(.system)).tag(AppLanguage.system)
+                    Text(localizer.languageLabel(.zhHans)).tag(AppLanguage.zhHans)
+                    Text(localizer.languageLabel(.english)).tag(AppLanguage.english)
+                }
             }
 
-            Section("Temperature") {
+            Section(localizer.string("settings.temperature")) {
                 Picker(
-                    "Unit",
+                    localizer.string("settings.unit"),
                     selection: Binding(
                         get: { runtime.settings.temperatureUnit },
                         set: { value in
@@ -29,12 +45,12 @@ struct SettingsView: View {
                         }
                     )
                 ) {
-                    Text("Celsius").tag(TemperatureUnit.celsius)
-                    Text("Fahrenheit").tag(TemperatureUnit.fahrenheit)
+                    Text(localizer.temperatureUnitLabel(.celsius)).tag(TemperatureUnit.celsius)
+                    Text(localizer.temperatureUnitLabel(.fahrenheit)).tag(TemperatureUnit.fahrenheit)
                 }
 
                 Picker(
-                    "Refresh Interval",
+                    localizer.string("settings.refreshInterval"),
                     selection: Binding(
                         get: { runtime.settings.refreshInterval },
                         set: { value in
@@ -42,13 +58,13 @@ struct SettingsView: View {
                         }
                     )
                 ) {
-                    Text("5 seconds").tag(RefreshInterval.fiveSeconds)
-                    Text("10 seconds").tag(RefreshInterval.tenSeconds)
-                    Text("30 seconds").tag(RefreshInterval.thirtySeconds)
+                    Text(localizer.refreshIntervalLabel(.fiveSeconds)).tag(RefreshInterval.fiveSeconds)
+                    Text(localizer.refreshIntervalLabel(.tenSeconds)).tag(RefreshInterval.tenSeconds)
+                    Text(localizer.refreshIntervalLabel(.thirtySeconds)).tag(RefreshInterval.thirtySeconds)
                 }
 
                 Picker(
-                    "Default Trend Range",
+                    localizer.string("settings.defaultTrendRange"),
                     selection: Binding(
                         get: { runtime.settings.defaultTrendRange },
                         set: { value in
@@ -56,14 +72,14 @@ struct SettingsView: View {
                         }
                     )
                 ) {
-                    Text("15 minutes").tag(TemperatureHistoryRange.fifteenMinutes)
-                    Text("1 hour").tag(TemperatureHistoryRange.oneHour)
-                    Text("6 hours").tag(TemperatureHistoryRange.sixHours)
-                    Text("Session").tag(TemperatureHistoryRange.allSession)
+                    Text(localizer.rangeLabel(.fifteenMinutes)).tag(TemperatureHistoryRange.fifteenMinutes)
+                    Text(localizer.rangeLabel(.oneHour)).tag(TemperatureHistoryRange.oneHour)
+                    Text(localizer.rangeLabel(.sixHours)).tag(TemperatureHistoryRange.sixHours)
+                    Text(localizer.rangeLabel(.allSession)).tag(TemperatureHistoryRange.allSession)
                 }
 
                 Picker(
-                    "Menu Bar Metric",
+                    localizer.string("settings.menuBarMetric"),
                     selection: Binding(
                         get: { runtime.settings.menuBarDisplayMetric },
                         set: { value in
@@ -71,20 +87,20 @@ struct SettingsView: View {
                         }
                     )
                 ) {
-                    Text("Hottest").tag(MenuBarDisplayMetric.hottest)
-                    Text("CPU").tag(MenuBarDisplayMetric.cpu)
-                    Text("GPU").tag(MenuBarDisplayMetric.gpu)
-                    Text("SSD/NAND").tag(MenuBarDisplayMetric.ssd)
-                    Text("Battery").tag(MenuBarDisplayMetric.battery)
+                    Text(localizer.menuBarMetricLabel(.hottest)).tag(MenuBarDisplayMetric.hottest)
+                    Text(localizer.menuBarMetricLabel(.cpu)).tag(MenuBarDisplayMetric.cpu)
+                    Text(localizer.menuBarMetricLabel(.gpu)).tag(MenuBarDisplayMetric.gpu)
+                    Text(localizer.menuBarMetricLabel(.ssd)).tag(MenuBarDisplayMetric.ssd)
+                    Text(localizer.menuBarMetricLabel(.battery)).tag(MenuBarDisplayMetric.battery)
                 }
             }
 
-            Section("Compatibility") {
+            Section(localizer.string("settings.compatibility")) {
                 CompatibilityView(compact: true)
             }
 
-            Section("History") {
-                Button("Clear Current Session History", role: .destructive) {
+            Section(localizer.string("settings.history")) {
+                Button(localizer.string("settings.clearCurrentSessionHistory"), role: .destructive) {
                     isShowingClearConfirmation = true
                 }
 
@@ -97,13 +113,13 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 620)
-        .alert("Clear current session history?", isPresented: $isShowingClearConfirmation) {
-            Button("Clear", role: .destructive) {
+        .alert(localizer.string("settings.clearCurrentSessionHistory.confirmTitle"), isPresented: $isShowingClearConfirmation) {
+            Button(localizer.string("action.clear"), role: .destructive) {
                 runtime.clearCurrentSessionHistory()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(localizer.string("action.cancel"), role: .cancel) {}
         } message: {
-            Text("Existing trend samples for this app session will be removed.")
+            Text(localizer.string("settings.clearCurrentSessionHistory.confirmMessage"))
         }
     }
 }

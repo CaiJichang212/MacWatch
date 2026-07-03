@@ -8,18 +8,20 @@ struct ContentView: View {
     private let windowCommandCenter = WindowCommandCenter.shared
 
     var body: some View {
+        let localizer = runtime.localizer
+
         NavigationSplitView {
             List(selection: $selection) {
-                Section("Overview") {
-                    Label("Dashboard", systemImage: "rectangle.grid.2x2")
+                Section(localizer.string("navigation.overview")) {
+                    Label(localizer.string("dashboard.title"), systemImage: "rectangle.grid.2x2")
                         .tag(MainWindowRoute.dashboard)
-                    Label("Compatibility", systemImage: "checklist")
+                    Label(localizer.string("navigation.compatibility"), systemImage: "checklist")
                         .tag(MainWindowRoute.compatibility)
                 }
 
-                Section("Metrics") {
+                Section(localizer.string("navigation.metrics")) {
                     ForEach(TemperatureMetricCatalog.overviewMetrics) { descriptor in
-                        Label(descriptor.title, systemImage: iconName(for: descriptor.domain))
+                        Label(descriptor.localizedTitle(localizer), systemImage: iconName(for: descriptor.domain))
                             .tag(MainWindowRoute.detail(descriptor.domain))
                     }
                 }
@@ -29,7 +31,7 @@ struct ContentView: View {
             detailView
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(minWidth: 920, minHeight: 640)
+        .frame(minWidth: 760, minHeight: 560)
         .sheet(isPresented: $showFirstRunGuide) {
             FirstRunGuideView(
                 context: runtime.firstRunGuideContext,

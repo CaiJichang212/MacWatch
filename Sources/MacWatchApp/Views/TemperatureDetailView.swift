@@ -20,13 +20,15 @@ struct TemperatureDetailView: View {
     }
 
     var body: some View {
+        let localizer = runtime.localizer
         let fallback = TemperatureOverviewSnapshot(
             liveState: runtime.liveState,
-            settings: runtime.settings
+            settings: runtime.settings,
+            localizer: localizer
         )
         .rows
         .first(where: { $0.domain == descriptor.domain })?
-        .statusText ?? "Waiting"
+        .abnormalStatusText ?? localizer.string("status.waiting")
         let selectedDescriptor = selectedDetailDescriptor
         let snapshot = TemperatureDetailSnapshot(
             descriptor: selectedDescriptor,
@@ -35,11 +37,12 @@ struct TemperatureDetailView: View {
             currentCapability: runtime.liveState?.capabilitiesByDomain[descriptor.domain],
             lastValidSample: runtime.liveState?.lastValidSamplesByMetricName[effectiveSelectedMetricName],
             fallbackText: fallback,
-            settings: runtime.settings
+            settings: runtime.settings,
+            localizer: localizer
         )
 
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(snapshot.title)
@@ -52,38 +55,39 @@ struct TemperatureDetailView: View {
                     Spacer()
 
                     if descriptor.detailMetricOptions.count > 1 {
-                        Picker("Metric", selection: $selectedMetricName) {
+                        Picker(localizer.string("detail.metric"), selection: $selectedMetricName) {
                             ForEach(descriptor.detailMetricOptions) { option in
-                                Text(option.label).tag(option.metricName)
+                                Text(localizedDetailOptionLabel(for: option.metricName, localizer: localizer)).tag(option.metricName)
                             }
                         }
                         .pickerStyle(.segmented)
                         .frame(width: 180)
                     }
 
-                    Picker("Range", selection: $selectedRange) {
+                    Picker(localizer.string("detail.range"), selection: $selectedRange) {
                         ForEach(TemperatureHistoryRange.allCases, id: \.self) { range in
-                            Text(rangeLabel(range)).tag(range)
+                            Text(rangeLabel(range, localizer: localizer)).tag(range)
                         }
                     }
                     .pickerStyle(.segmented)
                     .frame(width: 320)
                 }
 
-                statGrid(snapshot: snapshot)
+                statGrid(snapshot: snapshot, localizer: localizer)
 
-                metaCard(snapshot: snapshot)
+                metaCard(snapshot: snapshot, localizer: localizer)
 
                 TemperatureTrendView(
-                    title: "\(snapshot.title) Trend",
+                    title: localizer.string("detail.trendTitle", snapshot.title),
                     series: series,
                     fallbackText: snapshot.trendFallbackText,
-                    unit: runtime.settings.temperatureUnit
+                    unit: runtime.settings.temperatureUnit,
+                    localizer: localizer
                 )
             }
             .padding(24)
         }
-        .navigationTitle(descriptor.title)
+        .navigationTitle(descriptor.localizedTitle(localizer))
         .task {
             guard hasAppliedDefaultRange == false else {
                 return
@@ -110,7 +114,7 @@ struct TemperatureDetailView: View {
         }
     }
 
-    private func statGrid(snapshot: TemperatureDetailSnapshot) -> some View {
+    private func statGrid(snapshot: TemperatureDetailSnapshot, localizer: AppLocalizer) -> some View {
         LazyVGrid(
             columns: [
                 GridItem(.flexible(), spacing: 12),
@@ -119,12 +123,12 @@ struct TemperatureDetailView: View {
             ],
             spacing: 12
         ) {
-            statCard(label: "Current", value: snapshot.currentValueText)
-            statCard(label: "Max", value: snapshot.maximumText)
-            statCard(label: "Min", value: snapshot.minimumText)
-            statCard(label: "Average", value: snapshot.averageText)
-            statCard(label: "Peak Time", value: snapshot.peakTimeText)
-            statCard(label: "Source", value: snapshot.sourceText)
+            statCard(label: localizer.string("detail.current"), value: snapshot.currentValueText)
+            statCard(label: localizer.string("detail.maximum"), value: snapshot.maximumText)
+            statCard(label: localizer.string("detail.minimum"), value: snapshot.minimumText)
+            statCard(label: localizer.string("detail.average"), value: snapshot.averageText)
+            statCard(label: localizer.string("detail.peakTime"), value: snapshot.peakTimeText)
+            statCard(label: localizer.string("detail.source"), value: snapshot.sourceText)
         }
     }
 
@@ -143,18 +147,18 @@ struct TemperatureDetailView: View {
         .background(.background, in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private func metaCard(snapshot: TemperatureDetailSnapshot) -> some View {
+    private func metaCard(snapshot: TemperatureDetailSnapshot, localizer: AppLocalizer) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Sampling")
+            Text(localizer.string("detail.sampling"))
                 .font(.headline)
-            Text("Realtime interval: \(Int(runtime.effectiveRealtimeInterval(for: descriptor.domain)))s")
+            Text(localizer.string("detail.realtimeInterval", Int(runtime.effectiveRealtimeInterval(for: descriptor.domain))))
                 .foregroundStyle(.secondary)
-            Text("State: \(snapshot.statusText)")
+            Text(localizer.string("detail.state", snapshot.statusText))
                 .foregroundStyle(.secondary)
-            Text("Samples in range: \(snapshot.sampleSummaryText)")
+            Text(localizer.string("detail.samplesInRange", snapshot.sampleSummaryText))
                 .foregroundStyle(.secondary)
             if let rawKeyText = snapshot.rawKeyText {
-                Text("Raw key: \(rawKeyText)")
+                Text(localizer.string("detail.rawKey", rawKeyText))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -164,17 +168,8 @@ struct TemperatureDetailView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private func rangeLabel(_ range: TemperatureHistoryRange) -> String {
-        switch range {
-        case .fifteenMinutes:
-            return "15m"
-        case .oneHour:
-            return "1h"
-        case .sixHours:
-            return "6h"
-        case .allSession:
-            return "Session"
-        }
+    private func rangeLabel(_ range: TemperatureHistoryRange, localizer: AppLocalizer) -> String {
+        localizer.shortRangeLabel(range)
     }
 
     private var detailQueryKey: DetailQueryKey {
@@ -198,10 +193,13 @@ struct TemperatureDetailView: View {
             domain: descriptor.domain,
             metricName: metricName,
             averageMetricName: nil,
-            title: "\(descriptor.title) \(descriptor.detailOptionLabel(for: metricName))",
             menuBarMetric: descriptor.menuBarMetric,
             isMVPCompatibilityRequired: descriptor.isMVPCompatibilityRequired
         )
+    }
+
+    private func localizedDetailOptionLabel(for metricName: String, localizer: AppLocalizer) -> String {
+        descriptor.localizedDetailOptionLabel(for: metricName, localizer: localizer)
     }
 }
 
@@ -225,16 +223,25 @@ struct TemperatureDetailSnapshot: Equatable {
         currentCapability: TemperatureCapability?,
         lastValidSample: TemperatureSample?,
         fallbackText: String,
-        settings: AppSettings
+        settings: AppSettings,
+        localizer: AppLocalizer = .english
     ) {
-        self.title = descriptor.title
+        let metricTitle = descriptor.localizedTitle(localizer)
+        let optionSuffix = descriptor.metricName == TemperatureMetricCatalog.requiredMetric(for: descriptor.domain).metricName
+            ? nil
+            : descriptor.localizedDetailOptionLabel(for: descriptor.metricName, localizer: localizer)
+        self.title = optionSuffix.map { "\(metricTitle) \($0)" } ?? metricTitle
         currentValueText = TemperatureFormatter.valueText(
             sample: currentSample,
             lastValidSample: lastValidSample,
             unit: settings.temperatureUnit
         )
-        let liveStatus = TemperatureFormatter.statusText(sample: currentSample, capability: currentCapability)
-        statusText = liveStatus == "Waiting" ? fallbackText : liveStatus
+        let liveStatus = TemperatureFormatter.statusText(
+            sample: currentSample,
+            capability: currentCapability,
+            localizer: localizer
+        )
+        statusText = liveStatus == localizer.string("status.waiting") ? fallbackText : liveStatus
 
         guard let series else {
             sampleSummaryText = fallbackText
@@ -249,15 +256,16 @@ struct TemperatureDetailSnapshot: Equatable {
         }
         let validSampleCount = series.statistics.validSampleCount
         sampleSummaryText = Self.sampleSummaryText(
-            validSampleCount: validSampleCount
+            validSampleCount: validSampleCount,
+            localizer: localizer
         )
         maximumText = Self.formatValue(series.statistics.maximumCelsius, unit: settings.temperatureUnit)
         minimumText = Self.formatValue(series.statistics.minimumCelsius, unit: settings.temperatureUnit)
         averageText = Self.formatValue(series.statistics.averageCelsius, unit: settings.temperatureUnit)
-        peakTimeText = TemperatureTimestampFormatter.shortTimeText(series.statistics.peakAt)
+        peakTimeText = TemperatureTimestampFormatter.shortTimeText(series.statistics.peakAt, locale: localizer.locale)
         sourceText = TemperatureFormatter.sourceText(sample: currentSample, capability: currentCapability)
         rawKeyText = TemperatureFormatter.rawKeyText(sample: currentSample, capability: currentCapability)
-        trendFallbackText = validSampleCount == 0 ? "No samples in selected range" : fallbackText
+        trendFallbackText = validSampleCount == 0 ? localizer.string("detail.noSamplesInSelectedRange") : fallbackText
     }
 
     init(domainTitle: String, series: TemperatureSeries?, fallbackText: String) {
@@ -267,7 +275,6 @@ struct TemperatureDetailSnapshot: Equatable {
                 domain: series?.domain ?? .cpu,
                 metricName: series?.metricName ?? TemperatureMetricName.cpuHottest,
                 averageMetricName: nil,
-                title: domainTitle,
                 menuBarMetric: nil,
                 isMVPCompatibilityRequired: false
             ),
@@ -276,7 +283,8 @@ struct TemperatureDetailSnapshot: Equatable {
             currentCapability: nil,
             lastValidSample: nil,
             fallbackText: fallbackText,
-            settings: .default
+            settings: .default,
+            localizer: .english
         )
     }
 
@@ -287,9 +295,9 @@ struct TemperatureDetailSnapshot: Equatable {
         return TemperatureFormatter.text(celsius: value, unit: unit)
     }
 
-    private static func sampleSummaryText(validSampleCount: Int) -> String {
-        let sampleWord = validSampleCount == 1 ? "sample" : "samples"
-        return "\(validSampleCount) \(sampleWord)"
+    private static func sampleSummaryText(validSampleCount: Int, localizer: AppLocalizer) -> String {
+        let key = validSampleCount == 1 ? "detail.sampleCount.one" : "detail.sampleCount.other"
+        return localizer.string(key, validSampleCount)
     }
 }
 

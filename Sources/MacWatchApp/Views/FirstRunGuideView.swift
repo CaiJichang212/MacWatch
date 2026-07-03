@@ -3,6 +3,7 @@ import SwiftUI
 
 struct FirstRunGuideView: View {
     let context: FirstRunGuideContext
+    let language: AppLanguage
     let onContinue: (FirstRunGuideConfiguration) -> Void
 
     @State private var configuration: FirstRunGuideConfiguration
@@ -13,71 +14,79 @@ struct FirstRunGuideView: View {
         onContinue: @escaping (FirstRunGuideConfiguration) -> Void
     ) {
         self.context = context
+        self.language = initialSettings.language
         self.onContinue = onContinue
         _configuration = State(initialValue: FirstRunGuideConfiguration(settings: initialSettings))
     }
 
     var body: some View {
+        let localizer = AppLocalizer.resolve(language: language)
+
         VStack(alignment: .leading, spacing: 18) {
-            Text("首次启动说明")
+            Text(localizer.string("firstRun.title"))
                 .font(.largeTitle)
                 .fontWeight(.semibold)
 
-            Text("MacWatch MVP 已启动。应用默认只采集本机温度，不做数据导出、不上传、不联网。")
+            Text(localizer.string("firstRun.intro"))
                 .font(.body)
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("设备识别")
+                Text(localizer.string("firstRun.deviceRecognition"))
                     .font(.headline)
-                Text("机型：\(context.displayModel)")
+                Text(localizer.string("firstRun.model", context.modelIdentifier ?? "--"))
                     .font(.body)
-                Text("芯片：\(context.displayChip)")
+                Text(localizer.string("firstRun.chip", context.chipName ?? "--"))
                     .font(.body)
-                Text("兼容状态：\(context.isSupportedTargetMachine ? "在范围内" : "不在范围内")")
+                Text(localizer.string(
+                    "firstRun.compatibilityStatus",
+                    context.isSupportedTargetMachine
+                        ? localizer.string("firstRun.compatibility.inScope")
+                        : localizer.string("firstRun.compatibility.outOfScope")
+                ))
                     .font(.body)
-                Text(context.supportMessage)
+                Text(localizer.firstRunSupportMessage(context: context))
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
 
             Divider()
 
-            Text("隐私声明")
+            Text(localizer.string("firstRun.privacy"))
                 .font(.headline)
-            Text("MVP 默认不联网。所有温度样本仅保留在本次运行会话内本地数据库，且不记录网络内容。")
+            Text(localizer.string("firstRun.privacyBody"))
                 .font(.body)
 
             Divider()
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("初始配置")
+                Text(localizer.string("firstRun.initialConfiguration"))
                     .font(.headline)
 
-                Picker("温度单位", selection: $configuration.temperatureUnit) {
-                    Text("摄氏度").tag(TemperatureUnit.celsius)
-                    Text("华氏度").tag(TemperatureUnit.fahrenheit)
+                Picker(localizer.string("firstRun.temperatureUnit"), selection: $configuration.temperatureUnit) {
+                    Text(localizer.temperatureUnitLabel(.celsius)).tag(TemperatureUnit.celsius)
+                    Text(localizer.temperatureUnitLabel(.fahrenheit)).tag(TemperatureUnit.fahrenheit)
                 }
                 .pickerStyle(.segmented)
 
-                Picker("菜单栏显示", selection: $configuration.menuBarDisplayMetric) {
-                    Text("最高温度").tag(MenuBarDisplayMetric.hottest)
-                    Text("CPU").tag(MenuBarDisplayMetric.cpu)
-                    Text("GPU").tag(MenuBarDisplayMetric.gpu)
-                    Text("SSD/NAND").tag(MenuBarDisplayMetric.ssd)
-                    Text("电池").tag(MenuBarDisplayMetric.battery)
+                Picker(localizer.string("firstRun.menuBarDisplay"), selection: $configuration.menuBarDisplayMetric) {
+                    Text(localizer.menuBarMetricLabel(.hottest)).tag(MenuBarDisplayMetric.hottest)
+                    Text(localizer.menuBarMetricLabel(.cpu)).tag(MenuBarDisplayMetric.cpu)
+                    Text(localizer.menuBarMetricLabel(.gpu)).tag(MenuBarDisplayMetric.gpu)
+                    Text(localizer.menuBarMetricLabel(.ssd)).tag(MenuBarDisplayMetric.ssd)
+                    Text(localizer.menuBarMetricLabel(.battery)).tag(MenuBarDisplayMetric.battery)
                 }
 
-                Picker("刷新间隔", selection: $configuration.refreshInterval) {
-                    Text("5 秒").tag(RefreshInterval.fiveSeconds)
-                    Text("10 秒").tag(RefreshInterval.tenSeconds)
-                    Text("30 秒").tag(RefreshInterval.thirtySeconds)
+                Picker(localizer.string("firstRun.refreshInterval"), selection: $configuration.refreshInterval) {
+                    Text(localizer.refreshIntervalLabel(.fiveSeconds)).tag(RefreshInterval.fiveSeconds)
+                    Text(localizer.refreshIntervalLabel(.tenSeconds)).tag(RefreshInterval.tenSeconds)
+                    Text(localizer.refreshIntervalLabel(.thirtySeconds)).tag(RefreshInterval.thirtySeconds)
                 }
                 .pickerStyle(.segmented)
             }
 
             HStack {
                 Spacer()
-                Button("开始监控") {
+                Button(localizer.string("firstRun.startMonitoring")) {
                     onContinue(configuration)
                 }
                 .keyboardShortcut(.defaultAction)

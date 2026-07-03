@@ -6,12 +6,22 @@ struct CompatibilityView: View {
     let compact: Bool
 
     var body: some View {
-        let snapshot = CompatibilitySnapshot(liveState: runtime.liveState)
+        let localizer = runtime.localizer
+        let snapshot = CompatibilitySnapshot(liveState: runtime.liveState, localizer: localizer)
 
+        if compact {
+            content(snapshot: snapshot, localizer: localizer)
+        } else {
+            content(snapshot: snapshot, localizer: localizer)
+                .navigationTitle(localizer.string("compatibility.title"))
+        }
+    }
+
+    private func content(snapshot: CompatibilitySnapshot, localizer: AppLocalizer) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 if compact == false {
-                    Text("Compatibility")
+                    Text(localizer.string("compatibility.title"))
                         .font(.title2.weight(.semibold))
                 }
 
@@ -22,21 +32,21 @@ struct CompatibilityView: View {
                                 .font(.headline)
                             Spacer()
                             Text(row.statusText)
-                                .foregroundStyle(row.statusText == "Valid" ? .primary : .secondary)
+                                .foregroundStyle(row.statusText == localizer.string("status.valid") ? .primary : .secondary)
                         }
 
-                        Text("Source: \(row.sourceText)")
+                        Text(localizer.string("compatibility.source", row.sourceText))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
 
                         if let reasonText = row.reasonText {
-                            Text("Reason: \(reasonText)")
+                            Text(localizer.string("compatibility.reason", reasonText))
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
 
                         if let rawKey = row.rawKey {
-                            Text("Raw Key: \(rawKey)")
+                            Text(localizer.string("compatibility.rawKey", rawKey))
                                 .font(.footnote)
                                 .foregroundStyle(.tertiary)
                         }
@@ -48,6 +58,5 @@ struct CompatibilityView: View {
             }
             .padding(compact ? 0 : 24)
         }
-        .navigationTitle("Compatibility")
     }
 }
