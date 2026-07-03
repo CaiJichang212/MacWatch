@@ -35,6 +35,15 @@ fi
 BUNDLE_PATH="$ROOT_DIR/dist/MacWatch.app"
 BUNDLE_BINARY="$BUNDLE_PATH/Contents/MacOS/MacWatchApp"
 
+logical_cpu_count() {
+    if [[ "${MACWATCH_TEST_MOCK_LOGICAL_CPU_COUNT:-}" != "" ]]; then
+        printf '%s\n' "$MACWATCH_TEST_MOCK_LOGICAL_CPU_COUNT"
+        return
+    fi
+
+    sysctl -n hw.logicalcpu 2>/dev/null || printf '1\n'
+}
+
 write_result() {
     local name="$1"
     local status="$2"
@@ -72,13 +81,16 @@ EOF
 
 run_resource_probe() {
     local output_file="$1"
+    local cpu_count
+    cpu_count="$(logical_cpu_count)"
 
     if [[ "${MACWATCH_TEST_MOCK_RESOURCE_SAMPLES+x}" == "x" ]]; then
-        python3 - "$MACWATCH_TEST_MOCK_RESOURCE_SAMPLES" "$output_file" "$CONFIGURATION" <<'PY'
+        python3 - "$MACWATCH_TEST_MOCK_RESOURCE_SAMPLES" "$output_file" "$CONFIGURATION" "$cpu_count" <<'PY'
 import json
 import sys
 
-raw_samples, output_path, configuration = sys.argv[1:]
+raw_samples, output_path, configuration, logical_cpu_count = sys.argv[1:]
+logical_cpu_count = max(int(logical_cpu_count), 1)
 samples = []
 for line in raw_samples.splitlines():
     parts = line.split()
@@ -111,16 +123,19 @@ if not samples:
         "sampleCount": 0,
     }
 else:
-    avg_cpu = sum(v[0] for v in samples) / len(samples)
+    raw_avg_cpu = sum(v[0] for v in samples) / len(samples)
+    avg_cpu = raw_avg_cpu / logical_cpu_count
     peak_rss_memory = max(v[1] for v in samples)
     peak_memory = max(v[2] for v in samples)
     payload = {
         "status": "passed" if avg_cpu < 2.0 and peak_memory < 120.0 else "failed",
         "averageCpuPercent": round(avg_cpu, 2),
+        "cpuNormalizationFactor": logical_cpu_count,
         "configuration": configuration,
         "memorySource": "physicalFootprint" if any(v[1] != v[2] for v in samples) else "rssFallback",
         "peakMemoryMB": round(peak_memory, 2),
         "peakRSSMemoryMB": round(peak_rss_memory, 2),
+        "rawAverageCpuPercent": round(raw_avg_cpu, 2),
         "sampleCount": len(samples),
     }
 
@@ -170,7 +185,7 @@ PY
     local resource_exit=0
     wait "$pid" 2>/dev/null || resource_exit=$?
 
-    python3 - "$samples" "$output_file" "$CONFIGURATION" "$resource_report" "$resource_exit" <<'PY'
+    python3 - "$samples" "$output_file" "$CONFIGURATION" "$resource_report" "$resource_exit" "$cpu_count" <<'PY'
 import json
 import sys
 
@@ -178,6 +193,7 @@ raw_samples = sys.argv[1].splitlines()
 configuration = sys.argv[3]
 report_path = sys.argv[4]
 resource_exit = int(sys.argv[5])
+logical_cpu_count = max(int(sys.argv[6]), 1)
 samples = []
 for line in raw_samples:
     parts = line.split()
@@ -208,7 +224,8 @@ elif resource_report is None:
         "sampleCount": len(samples),
     }
 else:
-    avg_cpu = sum(v[0] for v in samples) / len(samples)
+    raw_avg_cpu = sum(v[0] for v in samples) / len(samples)
+    avg_cpu = raw_avg_cpu / logical_cpu_count
     peak_rss_memory = max(v[1] for v in samples)
     metrics = resource_report.get("metrics", {})
     peak_memory = float(metrics.get("residentMemoryMB", "999"))
@@ -218,11 +235,13 @@ else:
     payload = {
         "status": "passed" if avg_cpu < 2.0 and peak_memory < 120.0 and not failures else "failed",
         "averageCpuPercent": round(avg_cpu, 2),
+        "cpuNormalizationFactor": logical_cpu_count,
         "configuration": configuration,
         "failures": failures,
         "memorySource": metrics.get("memorySource", "appResidentMemory"),
         "peakMemoryMB": round(peak_memory, 2),
         "peakRSSMemoryMB": round(peak_rss_memory, 2),
+        "rawAverageCpuPercent": round(raw_avg_cpu, 2),
         "sampleCount": len(samples),
     }
 with open(sys.argv[2], "w", encoding="utf-8") as handle:

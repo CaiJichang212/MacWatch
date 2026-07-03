@@ -106,7 +106,7 @@ swift test --filter TemperatureSchedulerTests/testName
 ./scripts/package_app.sh --configuration release
 ```
 
-`package_app.sh` 还支持 `--skip-build`、`--binary <path>` 和 `--output <bundle-path>`，用于脚本测试或复用已有二进制。
+`package_app.sh` 会同时打包 SwiftPM 生成的本地化资源 bundle。它还支持 `--skip-build`、`--binary <path>` 和 `--output <bundle-path>`；复用自定义二进制时，二进制同级必须存在 `MacWatch_MacWatchApp.bundle`。
 
 读取一次温度诊断 JSON Lines：
 

@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "MacWatch",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v13),
     ],
@@ -17,6 +18,9 @@ let package = Package(
             dependencies: [
                 "MacWatchCore",
                 "StatsAdapter",
+            ],
+            resources: [
+                .process("Resources"),
             ]
         ),
         .target(

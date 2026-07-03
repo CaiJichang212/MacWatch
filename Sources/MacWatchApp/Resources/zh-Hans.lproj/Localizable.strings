@@ -1,0 +1,139 @@
+"window.main.title" = "MacWatch";
+"window.settings.title" = "设置";
+
+"menu.app.title" = "MacWatch";
+"menu.app.settings" = "设置…";
+"menu.app.quit" = "退出 MacWatch";
+"menu.window.title" = "窗口";
+"menu.window.close" = "关闭窗口";
+
+"popup.currentHottest" = "当前最高温";
+"popup.updated" = "更新于 %@";
+"popup.average" = "平均 %@";
+"popup.dashboard" = "总览";
+"popup.compatibility" = "兼容性";
+"popup.settings" = "设置";
+"popup.quit" = "退出";
+
+"dashboard.title" = "总览";
+"dashboard.currentHottestTemperature" = "当前最高温度";
+"dashboard.updated" = "更新于 %@";
+"dashboard.available" = "可用：%d/%d";
+"dashboard.recentTrend1Hour" = "最近 1 小时趋势";
+"dashboard.metric" = "指标";
+"dashboard.details" = "详情";
+"dashboard.unavailableMetrics" = "不可用指标";
+"dashboard.allMetricsValid" = "当前所有已跟踪指标都能正常读取。";
+
+"navigation.overview" = "概览";
+"navigation.metrics" = "设备";
+"navigation.compatibility" = "兼容性";
+
+"metric.hottest" = "最高温";
+"metric.average" = "平均";
+"metric.cpu" = "CPU";
+"metric.gpu" = "GPU";
+"metric.ssd" = "SSD/NAND";
+"metric.battery" = "电池";
+"metric.system" = "系统";
+"metric.sensor" = "传感器";
+
+"compatibility.title" = "兼容性";
+"compatibility.source" = "来源：%@";
+"compatibility.reason" = "原因：%@";
+"compatibility.rawKey" = "原始键：%@";
+
+"settings.general" = "通用";
+"settings.launchMainWindowOnStart" = "启动时打开主窗口";
+"settings.language" = "语言";
+"settings.temperature" = "温度";
+"settings.unit" = "单位";
+"settings.refreshInterval" = "刷新间隔";
+"settings.defaultTrendRange" = "默认趋势范围";
+"settings.menuBarMetric" = "菜单栏指标";
+"settings.compatibility" = "兼容性";
+"settings.history" = "历史";
+"settings.clearCurrentSessionHistory" = "清除当前会话历史";
+"settings.clearCurrentSessionHistory.confirmTitle" = "清除当前会话历史？";
+"settings.clearCurrentSessionHistory.confirmMessage" = "当前应用会话内已有的趋势样本将被移除。";
+
+"language.system" = "跟随系统";
+"language.zhHans" = "中文";
+"language.english" = "English";
+
+"unit.celsius" = "摄氏度";
+"unit.fahrenheit" = "华氏度";
+"refresh.5seconds" = "5 秒";
+"refresh.10seconds" = "10 秒";
+"refresh.30seconds" = "30 秒";
+"range.15minutes" = "15 分钟";
+"range.1hour" = "1 小时";
+"range.6hours" = "6 小时";
+"range.session" = "本次会话";
+"range.short.15minutes" = "15 分钟";
+"range.short.1hour" = "1 小时";
+"range.short.6hours" = "6 小时";
+"range.short.session" = "会话";
+
+"action.clear" = "清除";
+"action.cancel" = "取消";
+
+"firstRun.title" = "首次启动说明";
+"firstRun.intro" = "MacWatch MVP 已启动。应用默认只采集本机温度，不做数据导出、不上传、不联网。";
+"firstRun.deviceRecognition" = "设备识别";
+"firstRun.model" = "机型：%@";
+"firstRun.chip" = "芯片：%@";
+"firstRun.compatibilityStatus" = "兼容状态：%@";
+"firstRun.compatibility.inScope" = "在范围内";
+"firstRun.compatibility.outOfScope" = "不在范围内";
+"firstRun.support.inScope" = "当前设备在 MVP 覆盖范围内。";
+"firstRun.support.notMacBookAir" = "未识别为 MacBook Air（M 系列）。MVP 默认只保证 MacBook Air 系列。";
+"firstRun.support.notAppleSilicon" = "当前非 Apple Silicon。MVP 默认面向 Apple Silicon 的 MacBook Air。";
+"firstRun.privacy" = "隐私声明";
+"firstRun.privacyBody" = "MVP 默认不联网。所有温度样本仅保留在本次运行会话内本地数据库，且不记录网络内容。";
+"firstRun.initialConfiguration" = "初始配置";
+"firstRun.temperatureUnit" = "温度单位";
+"firstRun.menuBarDisplay" = "菜单栏显示";
+"firstRun.refreshInterval" = "刷新间隔";
+"firstRun.startMonitoring" = "开始监控";
+
+"detail.metric" = "指标";
+"detail.range" = "范围";
+"detail.current" = "当前值";
+"detail.maximum" = "最高";
+"detail.minimum" = "最低";
+"detail.average" = "平均";
+"detail.peakTime" = "峰值时间";
+"detail.source" = "来源";
+"detail.sampling" = "采样";
+"detail.realtimeInterval" = "实时间隔：%d 秒";
+"detail.state" = "状态：%@";
+"detail.samplesInRange" = "范围内样本：%@";
+"detail.rawKey" = "原始键：%@";
+"detail.trendTitle" = "%@ 趋势";
+"detail.noSamplesInSelectedRange" = "所选范围内没有样本";
+"detail.sampleCount.one" = "%d 个样本";
+"detail.sampleCount.other" = "%d 个样本";
+
+"trend.gaps" = "趋势中存在由睡眠、数据过期或读取失败导致的缺口。";
+
+"status.valid" = "正常";
+"status.unsupported" = "不支持";
+"status.readFailed" = "读取失败";
+"status.stale" = "数据已过期";
+"status.waiting" = "等待中";
+"status.menuBar.stale" = "已过期";
+
+"reason.unsupported" = "当前 Mac 不支持这个温度指标。";
+"reason.readFailed" = "MacWatch 无法读取最新温度。";
+"reason.stale" = "最新读数已经过期。";
+"reason.temperatureUnavailable" = "当前没有可读取的温度值。";
+"reason.noReadableTemperature" = "当前没有可读取的温度来源。";
+"reason.batteryServiceUnavailable" = "当前设备没有可用的电池温度服务。";
+"reason.probeReturnedNoSamples" = "本次探测没有返回温度样本。";
+"reason.invalidTemperature" = "最新读数没有通过校验。";
+"reason.historyWriteFailed" = "最新读数未能写入本地历史。";
+"reason.sleep" = "Mac 睡眠时采样会暂停。";
+"reason.wake" = "唤醒后采样正在恢复。";
+"reason.detectFailed" = "MacWatch 无法确定设备兼容性。";
+"reason.historyCleared" = "当前会话历史已清除。";

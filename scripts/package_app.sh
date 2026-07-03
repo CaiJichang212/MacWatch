@@ -55,6 +55,12 @@ if [[ ! -x "$APP_BINARY" ]]; then
     exit 1
 fi
 
+RESOURCE_BUNDLE="$(dirname "$APP_BINARY")/MacWatch_MacWatchApp.bundle"
+if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
+    echo "Missing resource bundle: $RESOURCE_BUNDLE" >&2
+    exit 1
+fi
+
 CONTENTS_DIR="$OUTPUT_BUNDLE/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 mkdir -p "$MACOS_DIR"
@@ -63,6 +69,7 @@ mkdir -p "$MACOS_DIR"
 
 cp "$APP_BINARY" "$MACOS_DIR/MacWatchApp"
 chmod +x "$MACOS_DIR/MacWatchApp"
+cp -R "$RESOURCE_BUNDLE" "$OUTPUT_BUNDLE/MacWatch_MacWatchApp.bundle"
 
 cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

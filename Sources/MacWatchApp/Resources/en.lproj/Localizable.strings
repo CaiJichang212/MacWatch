@@ -1,0 +1,139 @@
+"window.main.title" = "MacWatch";
+"window.settings.title" = "Settings";
+
+"menu.app.title" = "MacWatch";
+"menu.app.settings" = "Settings…";
+"menu.app.quit" = "Quit MacWatch";
+"menu.window.title" = "Window";
+"menu.window.close" = "Close Window";
+
+"popup.currentHottest" = "Current hottest";
+"popup.updated" = "Updated: %@";
+"popup.average" = "Avg %@";
+"popup.dashboard" = "Dashboard";
+"popup.compatibility" = "Compatibility";
+"popup.settings" = "Settings";
+"popup.quit" = "Quit";
+
+"dashboard.title" = "Dashboard";
+"dashboard.currentHottestTemperature" = "Current Hottest Temperature";
+"dashboard.updated" = "Updated: %@";
+"dashboard.available" = "Available: %d/%d";
+"dashboard.recentTrend1Hour" = "Recent 1 Hour Trend";
+"dashboard.metric" = "Metric";
+"dashboard.details" = "Details";
+"dashboard.unavailableMetrics" = "Unavailable Metrics";
+"dashboard.allMetricsValid" = "All tracked metrics currently have valid readings.";
+
+"navigation.overview" = "Overview";
+"navigation.metrics" = "Metrics";
+"navigation.compatibility" = "Compatibility";
+
+"metric.hottest" = "Hottest";
+"metric.average" = "Average";
+"metric.cpu" = "CPU";
+"metric.gpu" = "GPU";
+"metric.ssd" = "SSD/NAND";
+"metric.battery" = "Battery";
+"metric.system" = "System";
+"metric.sensor" = "Sensor";
+
+"compatibility.title" = "Compatibility";
+"compatibility.source" = "Source: %@";
+"compatibility.reason" = "Reason: %@";
+"compatibility.rawKey" = "Raw Key: %@";
+
+"settings.general" = "General";
+"settings.launchMainWindowOnStart" = "Launch main window on start";
+"settings.language" = "Language";
+"settings.temperature" = "Temperature";
+"settings.unit" = "Unit";
+"settings.refreshInterval" = "Refresh Interval";
+"settings.defaultTrendRange" = "Default Trend Range";
+"settings.menuBarMetric" = "Menu Bar Metric";
+"settings.compatibility" = "Compatibility";
+"settings.history" = "History";
+"settings.clearCurrentSessionHistory" = "Clear Current Session History";
+"settings.clearCurrentSessionHistory.confirmTitle" = "Clear current session history?";
+"settings.clearCurrentSessionHistory.confirmMessage" = "Existing trend samples for this app session will be removed.";
+
+"language.system" = "Follow System";
+"language.zhHans" = "中文";
+"language.english" = "English";
+
+"unit.celsius" = "Celsius";
+"unit.fahrenheit" = "Fahrenheit";
+"refresh.5seconds" = "5 seconds";
+"refresh.10seconds" = "10 seconds";
+"refresh.30seconds" = "30 seconds";
+"range.15minutes" = "15 minutes";
+"range.1hour" = "1 hour";
+"range.6hours" = "6 hours";
+"range.session" = "Session";
+"range.short.15minutes" = "15m";
+"range.short.1hour" = "1h";
+"range.short.6hours" = "6h";
+"range.short.session" = "Session";
+
+"action.clear" = "Clear";
+"action.cancel" = "Cancel";
+
+"firstRun.title" = "Before You Start";
+"firstRun.intro" = "MacWatch MVP is running. By default, the app only reads local temperature data and does not export, upload, or connect to the network.";
+"firstRun.deviceRecognition" = "Device Detection";
+"firstRun.model" = "Model: %@";
+"firstRun.chip" = "Chip: %@";
+"firstRun.compatibilityStatus" = "Compatibility: %@";
+"firstRun.compatibility.inScope" = "In Scope";
+"firstRun.compatibility.outOfScope" = "Out of Scope";
+"firstRun.support.inScope" = "This device is within the MVP support scope.";
+"firstRun.support.notMacBookAir" = "This device was not identified as a MacBook Air. The MVP only guarantees MacBook Air models by default.";
+"firstRun.support.notAppleSilicon" = "This Mac is not Apple Silicon. The MVP targets Apple Silicon MacBook Air by default.";
+"firstRun.privacy" = "Privacy";
+"firstRun.privacyBody" = "The MVP does not use the network by default. Temperature samples stay in a local database for the current app session only, and no network content is recorded.";
+"firstRun.initialConfiguration" = "Initial Configuration";
+"firstRun.temperatureUnit" = "Temperature Unit";
+"firstRun.menuBarDisplay" = "Menu Bar Display";
+"firstRun.refreshInterval" = "Refresh Interval";
+"firstRun.startMonitoring" = "Start Monitoring";
+
+"detail.metric" = "Metric";
+"detail.range" = "Range";
+"detail.current" = "Current";
+"detail.maximum" = "Max";
+"detail.minimum" = "Min";
+"detail.average" = "Average";
+"detail.peakTime" = "Peak Time";
+"detail.source" = "Source";
+"detail.sampling" = "Sampling";
+"detail.realtimeInterval" = "Realtime interval: %ds";
+"detail.state" = "State: %@";
+"detail.samplesInRange" = "Samples in range: %@";
+"detail.rawKey" = "Raw key: %@";
+"detail.trendTitle" = "%@ Trend";
+"detail.noSamplesInSelectedRange" = "No samples in selected range";
+"detail.sampleCount.one" = "%d sample";
+"detail.sampleCount.other" = "%d samples";
+
+"trend.gaps" = "Trend contains gaps caused by sleep, stale data, or read failures.";
+
+"status.valid" = "Valid";
+"status.unsupported" = "Unsupported";
+"status.readFailed" = "Read failed";
+"status.stale" = "Stale";
+"status.waiting" = "Waiting";
+"status.menuBar.stale" = "stale";
+
+"reason.unsupported" = "This temperature metric is not supported on this Mac.";
+"reason.readFailed" = "MacWatch could not read the latest temperature.";
+"reason.stale" = "The latest reading has expired.";
+"reason.temperatureUnavailable" = "No readable temperature value is available.";
+"reason.noReadableTemperature" = "No readable temperature source is available right now.";
+"reason.batteryServiceUnavailable" = "Battery temperature service is unavailable on this device.";
+"reason.probeReturnedNoSamples" = "The probe returned no temperature samples.";
+"reason.invalidTemperature" = "The latest reading did not pass validation.";
+"reason.historyWriteFailed" = "The latest reading could not be persisted to local history.";
+"reason.sleep" = "Sampling is paused while the Mac sleeps.";
+"reason.wake" = "Sampling is resuming after wake.";
+"reason.detectFailed" = "MacWatch could not determine device support.";
+"reason.historyCleared" = "Current session history was cleared.";

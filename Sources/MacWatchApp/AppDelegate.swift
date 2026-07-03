@@ -17,6 +17,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private var observers: [NSObjectProtocol] = []
     let runtime: MacWatchRuntime
+    private lazy var appMenuController = AppMenuController(
+        commandHandler: MenuBarCommandHandler(
+            openMainWindow: { [weak self] in self?.openDashboard() },
+            openSettings: { [weak self] in self?.openSettings() },
+            quitApplication: { [weak self] in self?.quitApplication() }
+        )
+    )
     private lazy var lifecycleCoordinator = AppLifecycleCoordinator { [weak self] event in
         self?.handleLifecycleEvent(event)
     }
@@ -83,8 +90,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         lifecycleCoordinator.record(.launched)
+        appMenuController.install(localizer: runtime.localizer)
         windowCommandCenter.registerOpenMainWindowAction { [weak self] in
             self?.showMainWindow()
+        }
+        runtime.settingsDidChange = { [weak self] settings in
+            guard let self else {
+                return
+            }
+            self.handleSettingsDidChange(settings)
         }
         if shouldSetupMenuBarOnLaunch {
             menuBarController = MenuBarController(
@@ -99,12 +113,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 self.menuBarController?.update(liveState: state, settings: self.runtime.settings)
-            }
-            runtime.settingsDidChange = { [weak self] settings in
-                guard let self else {
-                    return
-                }
-                self.menuBarController?.update(liveState: self.runtime.liveState, settings: settings)
             }
             menuBarController?.update(liveState: runtime.liveState, settings: runtime.settings)
         }
@@ -232,6 +240,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
+    private func handleSettingsDidChange(_ settings: AppSettings) {
+        menuBarController?.update(liveState: runtime.liveState, settings: settings)
+        appMenuController.install(localizer: runtime.localizer)
+        refreshWindowTitles()
+    }
+
+    private func refreshWindowTitles() {
+        let localizer = runtime.localizer
+        mainWindow?.title = localizer.string("window.main.title")
+        settingsWindow?.title = localizer.string("window.settings.title")
+    }
+
     private func showMainWindow() {
         if let mainWindow {
             mainWindow.makeKeyAndOrderFront(nil)
@@ -240,13 +260,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let hostingController = NSHostingController(
-            rootView: ContentView()
+            rootView: RuntimeLocalizedRoot {
+                ContentView()
+            }
                 .environmentObject(runtime)
         )
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "MacWatch"
-        window.setContentSize(NSSize(width: 920, height: 640))
-        window.minSize = NSSize(width: 920, height: 640)
+        window.title = runtime.localizer.string("window.main.title")
+        window.setContentSize(NSSize(width: 860, height: 620))
+        window.minSize = NSSize(width: 760, height: 560)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
         window.center()
@@ -263,13 +285,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let hostingController = NSHostingController(
-            rootView: SettingsView()
+            rootView: RuntimeLocalizedRoot {
+                SettingsView()
+            }
                 .environmentObject(runtime)
                 .frame(width: 520)
         )
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Settings"
-        window.setContentSize(NSSize(width: 520, height: 320))
+        window.title = runtime.localizer.string("window.settings.title")
+        window.setContentSize(NSSize(width: 520, height: 420))
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
         window.center()
