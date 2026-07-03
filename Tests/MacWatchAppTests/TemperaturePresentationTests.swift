@@ -9,6 +9,51 @@ final class TemperaturePresentationTests: XCTestCase {
         XCTAssertEqual(TemperatureFormatter.text(celsius: 72.4, unit: .fahrenheit), "162°F")
     }
 
+    func testAppLocalizerSystemModeResolvesSupportedLanguage() {
+        XCTAssertEqual(
+            AppLocalizer(language: .system, preferredLanguages: ["zh-Hans-CN"]).string("dashboard.title"),
+            "总览"
+        )
+        XCTAssertEqual(
+            AppLocalizer(language: .system, preferredLanguages: ["fr-FR"]).string("dashboard.title"),
+            "Dashboard"
+        )
+    }
+
+    func testAppLocalizerExplicitLanguageOverridesPreferredLanguage() {
+        XCTAssertEqual(
+            AppLocalizer(language: .zhHans, preferredLanguages: ["en-US"]).string("dashboard.title"),
+            "总览"
+        )
+        XCTAssertEqual(
+            AppLocalizer(language: .english, preferredLanguages: ["zh-Hans-CN"]).string("dashboard.title"),
+            "Dashboard"
+        )
+    }
+
+    func testTemperatureFormatterLocalizesAbnormalStatusAndReason() {
+        let sample = try! TemperatureSample.makeInvalid(
+            sessionID: UUID(),
+            timestamp: Date(timeIntervalSince1970: 10),
+            metricName: TemperatureMetricName.cpuHottest,
+            domain: .cpu,
+            deviceID: "cpu",
+            displayName: "CPU",
+            quality: .stale,
+            source: .hidSensors,
+            errorCode: "stale"
+        )
+
+        XCTAssertEqual(
+            TemperatureFormatter.statusText(sample: sample, capability: nil, localizer: .chinese),
+            "数据已过期"
+        )
+        XCTAssertEqual(
+            TemperatureFormatter.reasonText(sample: sample, capability: nil, localizer: .chinese),
+            "最新读数已经过期。"
+        )
+    }
+
     func testTemperatureMetricCatalogIncludesExpectedOverviewMetrics() {
         XCTAssertEqual(
             TemperatureMetricCatalog.overviewMetrics.map(\.domain),
@@ -122,13 +167,13 @@ final class TemperaturePresentationTests: XCTestCase {
             )
         )
 
-        let snapshot = TemperatureOverviewSnapshot(liveState: state, settings: .default)
+        let snapshot = TemperatureOverviewSnapshot(liveState: state, settings: .default, localizer: .english)
 
         XCTAssertEqual(snapshot.hottestValueText, "68°C")
         XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .ssd, .battery, .system, .sensor])
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .cpu })?.averageValueText, "62°C")
-        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.statusText, "Read failed")
-        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .battery })?.valueText, "32°C")
+        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.abnormalStatusText, "Read failed")
+        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .battery })?.primaryValueText, "32°C")
         XCTAssertEqual(snapshot.availableMetricCount, 2)
     }
 
@@ -152,10 +197,11 @@ final class TemperaturePresentationTests: XCTestCase {
             hottestValidSample: nil
         )
 
-        let snapshot = TemperatureOverviewSnapshot(liveState: state, settings: .default)
+        let snapshot = TemperatureOverviewSnapshot(liveState: state, settings: .default, localizer: .english)
 
         XCTAssertEqual(snapshot.hottestValueText, "--°C")
-        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .cpu })?.statusText, "Stale")
+        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .cpu })?.abnormalStatusText, "Stale")
+        XCTAssertNil(snapshot.rows.first(where: { $0.domain == .cpu })?.primaryValueText)
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .cpu })?.isStale, true)
     }
 
@@ -172,11 +218,14 @@ final class TemperaturePresentationTests: XCTestCase {
             hottestValidSample: nil
         )
 
-        let snapshot = CompatibilitySnapshot(liveState: state)
+        let snapshot = CompatibilitySnapshot(liveState: state, localizer: .english)
 
         XCTAssertEqual(snapshot.rows.map(\.domain), [.cpu, .gpu, .ssd, .battery, .system, .sensor])
         XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.statusText, "Unsupported")
-        XCTAssertEqual(snapshot.rows.first(where: { $0.domain == .gpu })?.reasonText, "unsupported")
+        XCTAssertEqual(
+            snapshot.rows.first(where: { $0.domain == .gpu })?.reasonText,
+            "This temperature metric is not supported on this Mac."
+        )
     }
 
     func testMenuBarTitleFormatterUsesConfiguredMetricAndKeepsTitleShort() throws {
@@ -269,9 +318,12 @@ final class TemperaturePresentationTests: XCTestCase {
             ]
         )
 
+        var settings = AppSettings.default
+        settings.language = .english
+
         let title = MenuBarTitleFormatter.title(
             liveState: state,
-            settings: .default
+            settings: settings
         )
 
         XCTAssertEqual(title.text, "72°C")
@@ -299,19 +351,18 @@ final class TemperaturePresentationTests: XCTestCase {
             domain: .system,
             metricName: TemperatureMetricName.systemHottest,
             title: "System",
-            valueText: TemperatureFormatter.placeholder(unit: .celsius),
+            primaryValueText: nil,
             averageValueText: nil,
-            statusText: TemperatureFormatter.statusText(sample: sample, capability: nil),
+            abnormalStatusText: TemperatureFormatter.statusText(sample: sample, capability: nil),
             sourceText: TemperatureFormatter.sourceText(sample: sample, capability: nil),
             reasonText: TemperatureFormatter.reasonText(sample: sample, capability: nil),
-            updatedAt: timestamp,
             rawKey: TemperatureFormatter.rawKeyText(sample: sample, capability: nil),
             isStale: false
         )
 
         XCTAssertEqual(row.rawKey, "A, B, C")
-        XCTAssertEqual(row.reasonText, "readFailed")
-        XCTAssertEqual(row.statusText, "Read failed")
+        XCTAssertEqual(row.reasonText, "MacWatch could not read the latest temperature.")
+        XCTAssertEqual(row.abnormalStatusText, "Read failed")
     }
 
     func testDetailSnapshotFormatsStatisticsAndDoesNotFabricateZeroValues() throws {
@@ -467,7 +518,7 @@ final class TemperaturePresentationTests: XCTestCase {
         XCTAssertEqual(snapshot.sampleSummaryText, "1 sample")
     }
 
-    func testPopupRowModelIncludesUpdatedAtText() throws {
+    func testPopupRowModelOmitsNormalStatusAndReason() throws {
         let sessionID = UUID()
         let timestamp = Date(timeIntervalSince1970: 900)
         let state = LiveTemperatureState(
@@ -498,12 +549,13 @@ final class TemperaturePresentationTests: XCTestCase {
             )
         )
 
-        let snapshot = TemperatureOverviewSnapshot(liveState: state, settings: .default)
+        let snapshot = TemperatureOverviewSnapshot(liveState: state, settings: .default, localizer: .english)
         let row = try XCTUnwrap(snapshot.rows.first(where: { $0.domain == .cpu }))
         let model = MenuBarPopupRowModel(row: row)
 
-        XCTAssertEqual(model.updatedAtText, "Updated: \(row.updatedAtText)")
-        XCTAssertNotEqual(model.updatedAtText, "Updated: --")
+        XCTAssertEqual(model.valueText, "67°C")
+        XCTAssertNil(model.statusText)
+        XCTAssertNil(model.reasonText)
     }
 
     func testTrendSegmentsBreakAtGapBoundaries() throws {

@@ -11,7 +11,8 @@ final class UserDefaultsSettingsStoreTests: XCTestCase {
             temperatureUnit: .fahrenheit,
             refreshInterval: .tenSeconds,
             defaultTrendRange: .sixHours,
-            menuBarDisplayMetric: .battery
+            menuBarDisplayMetric: .battery,
+            language: .zhHans
         )
 
         store.save(settings)
@@ -26,5 +27,33 @@ final class UserDefaultsSettingsStoreTests: XCTestCase {
         let store = UserDefaultsSettingsStore(defaults: defaults)
 
         XCTAssertEqual(store.load(), .default)
+    }
+
+    func testLegacyStoredPayloadKeepsExistingFieldsAndDefaultsLanguageToSystem() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let payload = """
+        {
+          "launchMainWindowOnStart": false,
+          "temperatureUnit": "fahrenheit",
+          "refreshInterval": 30,
+          "defaultTrendRange": "allSession",
+          "menuBarDisplayMetric": "gpu"
+        }
+        """.data(using: .utf8)!
+        defaults.set(payload, forKey: UserDefaultsSettingsStore.storageKey)
+        let store = UserDefaultsSettingsStore(defaults: defaults)
+
+        XCTAssertEqual(
+            store.load(),
+            AppSettings(
+                launchMainWindowOnStart: false,
+                temperatureUnit: .fahrenheit,
+                refreshInterval: .thirtySeconds,
+                defaultTrendRange: .allSession,
+                menuBarDisplayMetric: .gpu,
+                language: .system
+            )
+        )
     }
 }
