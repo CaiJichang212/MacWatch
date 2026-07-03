@@ -5,17 +5,16 @@ struct TemperatureMetricDescriptor: Identifiable, Equatable {
     let domain: TemperatureDomain
     let metricName: String
     let averageMetricName: String?
-    let title: String
     let menuBarMetric: MenuBarDisplayMetric?
     let isMVPCompatibilityRequired: Bool
 
     var detailMetricOptions: [TemperatureMetricOption] {
         guard let averageMetricName else {
-            return [TemperatureMetricOption(label: "Hottest", metricName: metricName)]
+            return [TemperatureMetricOption(kind: .hottest, metricName: metricName)]
         }
         return [
-            TemperatureMetricOption(label: "Hottest", metricName: metricName),
-            TemperatureMetricOption(label: "Average", metricName: averageMetricName),
+            TemperatureMetricOption(kind: .hottest, metricName: metricName),
+            TemperatureMetricOption(kind: .average, metricName: averageMetricName),
         ]
     }
 
@@ -27,12 +26,26 @@ struct TemperatureMetricDescriptor: Identifiable, Equatable {
     }
 
     func detailOptionLabel(for metricName: String) -> String {
-        detailMetricOptions.first { $0.metricName == metricName }?.label ?? "Hottest"
+        detailMetricOptions.first { $0.metricName == metricName }?.kind.rawValue ?? TemperatureMetricOption.Kind.hottest.rawValue
+    }
+
+    func localizedTitle(_ localizer: AppLocalizer) -> String {
+        localizer.metricTitle(for: domain)
+    }
+
+    func localizedDetailOptionLabel(for metricName: String, localizer: AppLocalizer) -> String {
+        let option = detailMetricOptions.first { $0.metricName == metricName }?.kind ?? .hottest
+        return localizer.detailMetricOptionLabel(isAverage: option == .average)
     }
 }
 
 struct TemperatureMetricOption: Identifiable, Equatable {
-    let label: String
+    enum Kind: String {
+        case hottest
+        case average
+    }
+
+    let kind: Kind
     let metricName: String
 
     var id: String { metricName }
@@ -45,7 +58,6 @@ enum TemperatureMetricCatalog {
             domain: .cpu,
             metricName: TemperatureMetricName.cpuHottest,
             averageMetricName: TemperatureMetricName.cpuAverage,
-            title: "CPU",
             menuBarMetric: .cpu,
             isMVPCompatibilityRequired: true
         ),
@@ -54,7 +66,6 @@ enum TemperatureMetricCatalog {
             domain: .gpu,
             metricName: TemperatureMetricName.gpuHottest,
             averageMetricName: TemperatureMetricName.gpuAverage,
-            title: "GPU",
             menuBarMetric: .gpu,
             isMVPCompatibilityRequired: true
         ),
@@ -63,7 +74,6 @@ enum TemperatureMetricCatalog {
             domain: .ssd,
             metricName: TemperatureMetricName.ssdInternal,
             averageMetricName: nil,
-            title: "SSD/NAND",
             menuBarMetric: .ssd,
             isMVPCompatibilityRequired: true
         ),
@@ -72,7 +82,6 @@ enum TemperatureMetricCatalog {
             domain: .battery,
             metricName: TemperatureMetricName.battery,
             averageMetricName: nil,
-            title: "Battery",
             menuBarMetric: .battery,
             isMVPCompatibilityRequired: true
         ),
@@ -81,7 +90,6 @@ enum TemperatureMetricCatalog {
             domain: .system,
             metricName: TemperatureMetricName.systemHottest,
             averageMetricName: nil,
-            title: "System",
             menuBarMetric: nil,
             isMVPCompatibilityRequired: true
         ),
@@ -90,7 +98,6 @@ enum TemperatureMetricCatalog {
             domain: .sensor,
             metricName: TemperatureMetricName.sensorTemperatureRaw,
             averageMetricName: nil,
-            title: "Sensor",
             menuBarMetric: nil,
             isMVPCompatibilityRequired: true
         ),
@@ -105,7 +112,6 @@ enum TemperatureMetricCatalog {
                 domain: domain,
                 metricName: TemperatureMetricName.systemHottest,
                 averageMetricName: nil,
-                title: domain.rawValue.capitalized,
                 menuBarMetric: nil,
                 isMVPCompatibilityRequired: false
             )

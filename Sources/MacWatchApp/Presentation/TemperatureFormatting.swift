@@ -61,34 +61,57 @@ enum TemperatureFormatter {
         return placeholder(unit: unit)
     }
 
-    static func statusText(sample: TemperatureSample?, capability: TemperatureCapability?) -> String {
+    static func statusText(
+        sample: TemperatureSample?,
+        capability: TemperatureCapability?,
+        localizer: AppLocalizer = .english
+    ) -> String {
         if let sample {
             switch sample.quality {
             case .valid:
-                return "Valid"
+                return localizer.string("status.valid")
             case .unsupported:
-                return "Unsupported"
+                return localizer.string("status.unsupported")
             case .readFailed:
-                return "Read failed"
+                return localizer.string("status.readFailed")
             case .stale:
-                return "Stale"
+                return localizer.string("status.stale")
             }
         }
 
         if let capability {
             if capability.supported == false {
-                return "Unsupported"
+                return localizer.string("status.unsupported")
             }
             if capability.readable == false {
-                return "Read failed"
+                return localizer.string("status.readFailed")
             }
         }
 
-        return "Waiting"
+        return localizer.string("status.waiting")
     }
 
-    static func reasonText(sample: TemperatureSample?, capability: TemperatureCapability?) -> String? {
-        sample?.errorCode ?? capability?.reasonCode
+    static func reasonText(
+        sample: TemperatureSample?,
+        capability: TemperatureCapability?,
+        localizer: AppLocalizer = .english
+    ) -> String? {
+        let reasonCode = sample?.errorCode ?? capability?.reasonCode
+        guard let reasonCode else {
+            return nil
+        }
+
+        let key = "reason.\(reasonCode)"
+        let localized = localizer.string(key)
+        if localized != key {
+            return localized
+        }
+
+        if let message = capability?.reasonMessage, message.isEmpty == false, message != reasonCode {
+            return message
+        }
+
+        return reasonCode
     }
 
     static func sourceText(sample: TemperatureSample?, capability: TemperatureCapability?) -> String {
@@ -143,7 +166,7 @@ enum MenuBarTitleFormatter {
             lastValidSample: lastValidSample,
             unit: settings.temperatureUnit
         )
-        let suffix = isStale ? "stale" : nil
+        let suffix = isStale ? AppLocalizer.resolve(language: settings.language).string("status.menuBar.stale") : nil
         let rawText = TemperatureDisplayText(text: text, statusSuffix: suffix, isStale: isStale)
 
         if rawText.fullText.count <= 30 {

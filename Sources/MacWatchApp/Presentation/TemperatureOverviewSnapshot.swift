@@ -6,31 +6,29 @@ struct TemperatureOverviewSnapshot: Equatable {
         let domain: TemperatureDomain
         let metricName: String
         let title: String
-        let valueText: String
+        let primaryValueText: String?
         let averageValueText: String?
-        let statusText: String
+        let abnormalStatusText: String?
         let sourceText: String
         let reasonText: String?
-        let updatedAt: Date?
         let rawKey: String?
         let isStale: Bool
 
         var id: TemperatureDomain { domain }
 
-        var updatedAtText: String {
-            TemperatureTimestampFormatter.shortTimeText(updatedAt)
-        }
+        var isNormal: Bool { abnormalStatusText == nil }
     }
 
     let hottestValueText: String
-    let hottestUpdatedAt: Date?
+    let updatedAt: Date?
     let rows: [Row]
     let availableMetricCount: Int
     let unavailableMetricTitles: [String]
 
     init(
         liveState: LiveTemperatureState?,
-        settings: AppSettings
+        settings: AppSettings,
+        localizer: AppLocalizer = .english
     ) {
         hottestValueText = liveState?.hottestValidSample.flatMap {
             guard let value = $0.valueCelsius else {
@@ -38,7 +36,7 @@ struct TemperatureOverviewSnapshot: Equatable {
             }
             return TemperatureFormatter.text(celsius: value, unit: settings.temperatureUnit)
         } ?? TemperatureFormatter.placeholder(unit: settings.temperatureUnit)
-        hottestUpdatedAt = liveState?.hottestValidSample?.timestamp
+        updatedAt = liveState?.updatedAt
 
         rows = TemperatureMetricCatalog.overviewMetrics.map { descriptor in
             let sample = liveState?.samplesByMetricName[descriptor.metricName]
@@ -48,25 +46,34 @@ struct TemperatureOverviewSnapshot: Equatable {
             let lastValidAverageSample = descriptor.averageMetricName.flatMap {
                 liveState?.lastValidSamplesByMetricName[$0]
             }
+            let isNormal = sample?.quality == .valid
+            let isAverageValid = averageSample?.quality == .valid
 
             return Row(
                 domain: descriptor.domain,
                 metricName: descriptor.metricName,
-                title: descriptor.title,
-                valueText: TemperatureFormatter.valueText(
+                title: descriptor.localizedTitle(localizer),
+                primaryValueText: isNormal ? TemperatureFormatter.valueText(
                     sample: sample,
                     lastValidSample: lastValidSample,
                     unit: settings.temperatureUnit
-                ),
-                averageValueText: descriptor.averageMetricName == nil ? nil : TemperatureFormatter.valueText(
+                ) : nil,
+                averageValueText: isNormal && isAverageValid ? TemperatureFormatter.valueText(
                     sample: averageSample,
                     lastValidSample: lastValidAverageSample,
                     unit: settings.temperatureUnit
+                ) : nil,
+                abnormalStatusText: isNormal ? nil : TemperatureFormatter.statusText(
+                    sample: sample,
+                    capability: capability,
+                    localizer: localizer
                 ),
-                statusText: TemperatureFormatter.statusText(sample: sample, capability: capability),
                 sourceText: TemperatureFormatter.sourceText(sample: sample, capability: capability),
-                reasonText: TemperatureFormatter.reasonText(sample: sample, capability: capability),
-                updatedAt: sample?.timestamp ?? capability?.updatedAt,
+                reasonText: isNormal ? nil : TemperatureFormatter.reasonText(
+                    sample: sample,
+                    capability: capability,
+                    localizer: localizer
+                ),
                 rawKey: TemperatureFormatter.rawKeyText(sample: sample, capability: capability),
                 isStale: TemperatureFormatter.isStale(sample: sample)
             )
@@ -76,7 +83,7 @@ struct TemperatureOverviewSnapshot: Equatable {
             liveState?.samplesByMetricName[row.metricName]?.quality == .valid
         }.count
         unavailableMetricTitles = rows
-            .filter { $0.statusText != "Valid" }
+            .filter { $0.isNormal == false }
             .map(\.title)
     }
 }

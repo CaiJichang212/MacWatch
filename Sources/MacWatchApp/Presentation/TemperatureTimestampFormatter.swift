@@ -1,17 +1,14 @@
 import Foundation
 
 enum TemperatureTimestampFormatter {
-    static func shortTimeText(_ timestamp: Date?) -> String {
+    static func shortTimeText(_ timestamp: Date?, locale: Locale = .autoupdatingCurrent) -> String {
         guard let timestamp else {
             return "--"
         }
-        return shortTime.string(from: timestamp)
-    }
-
-    private static let shortTime: DateFormatter = {
         let formatter = DateFormatter()
+        formatter.locale = locale
         formatter.timeStyle = .short
         formatter.dateStyle = .none
-        return formatter
-    }()
+        return formatter.string(from: timestamp)
+    }
 }
