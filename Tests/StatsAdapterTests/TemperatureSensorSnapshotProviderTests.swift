@@ -81,6 +81,32 @@ final class TemperatureSensorSnapshotProviderTests: XCTestCase {
         XCTAssertTrue(snapshot.readings.first { $0.rawKey == "GPU MTR Temp Sensor0" }?.averageCandidate == true)
         XCTAssertFalse(snapshot.readings.first { $0.rawKey == "PMU2 tcal" }?.averageCandidate ?? true)
     }
+
+    func testStatsSnapshotProviderFiltersZeroTemperatureSentinels() {
+        let provider = StatsTemperatureSensorSnapshotProvider(
+            platformDetector: FakeSnapshotPlatformDetector(platform: .m4),
+            hidReader: StaticSnapshotHIDReader(values: [
+                "GPU MTR Temp Sensor0": 0,
+                "pACC MTR Temp Sensor0": 63,
+            ]),
+            smcReader: StaticSnapshotSMCReader(values: [
+                "Tg0G": 0,
+                "Te05": 48,
+            ]),
+            catalog: AppleSiliconSensorCatalog(),
+            cacheDuration: 0,
+            clock: { Date(timeIntervalSince1970: 100) }
+        )
+
+        let snapshot = provider.readSnapshot()
+
+        XCTAssertFalse(snapshot.readings.contains { $0.rawKey == "GPU MTR Temp Sensor0" })
+        XCTAssertFalse(snapshot.readings.contains { $0.rawKey == "Tg0G" })
+        XCTAssertEqual(snapshot.readings.filter { $0.domain == .cpu }.map(\.rawKey).sorted(), [
+            "Te05",
+            "pACC MTR Temp Sensor0",
+        ])
+    }
 }
 
 private final class CountingHIDSnapshotReader: AppleSiliconTemperatureReading, @unchecked Sendable {

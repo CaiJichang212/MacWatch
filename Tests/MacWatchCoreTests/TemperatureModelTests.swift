@@ -72,7 +72,7 @@ final class TemperatureModelTests: XCTestCase {
     }
 
     func testValidSamplesRejectOutOfRangeAndNaNTemperatures() {
-        for invalidValue in [-1.0, 110.0, Double.nan] {
+        for invalidValue in [0.0, -1.0, 110.0, Double.nan] {
             XCTAssertThrowsError(
                 try TemperatureSample.makeValid(
                     sessionID: UUID(),

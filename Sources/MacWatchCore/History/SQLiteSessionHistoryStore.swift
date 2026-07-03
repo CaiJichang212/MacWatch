@@ -367,6 +367,10 @@ public final class SQLiteSessionHistoryStore: SessionHistoryStore {
     }
 
     private func decodeSample(statement: OpaquePointer?) throws -> TemperatureSample {
+        let id = try uuid(column: 0, statement: statement)
+        let sessionID = try uuid(column: 1, statement: statement)
+        let timestamp = date(column: 2, statement: statement)
+        let metricName = text(column: 3, statement: statement)
         let quality = try enumValue(
             rawValue: text(column: 9, statement: statement),
             type: TemperatureQuality.self
@@ -379,21 +383,51 @@ public final class SQLiteSessionHistoryStore: SessionHistoryStore {
             rawValue: text(column: 4, statement: statement),
             type: TemperatureDomain.self
         )
+        let deviceID = text(column: 5, statement: statement)
+        let displayName = text(column: 6, statement: statement)
+        let valueCelsius = nullableDouble(column: 7, statement: statement)
+        let rawKey = nullableText(column: 10, statement: statement)
+        let errorCode = nullableText(column: 11, statement: statement)
+        let attributes = decodeAttributes(nullableText(column: 12, statement: statement))
+
+        if quality == .valid,
+           valueCelsius.map(TemperatureSample.isValidTemperatureValue) != true {
+            var sanitizedAttributes = attributes
+            if let valueCelsius {
+                sanitizedAttributes["sanitizedPersistedValueCelsius"] = String(valueCelsius)
+            }
+            sanitizedAttributes["sanitizedPersistedQuality"] = quality.rawValue
+
+            return try TemperatureSample.makeInvalid(
+                id: id,
+                sessionID: sessionID,
+                timestamp: timestamp,
+                metricName: metricName,
+                domain: domain,
+                deviceID: deviceID,
+                displayName: displayName,
+                quality: .readFailed,
+                source: source,
+                rawKey: rawKey,
+                errorCode: errorCode ?? "invalidPersistedTemperature",
+                attributes: sanitizedAttributes
+            )
+        }
 
         return try TemperatureSample(
-            id: uuid(column: 0, statement: statement),
-            sessionID: uuid(column: 1, statement: statement),
-            timestamp: date(column: 2, statement: statement),
-            metricName: text(column: 3, statement: statement),
+            id: id,
+            sessionID: sessionID,
+            timestamp: timestamp,
+            metricName: metricName,
             domain: domain,
-            deviceID: text(column: 5, statement: statement),
-            displayName: text(column: 6, statement: statement),
-            valueCelsius: nullableDouble(column: 7, statement: statement),
+            deviceID: deviceID,
+            displayName: displayName,
+            valueCelsius: valueCelsius,
             source: source,
             quality: quality,
-            rawKey: nullableText(column: 10, statement: statement),
-            errorCode: nullableText(column: 11, statement: statement),
-            attributes: decodeAttributes(nullableText(column: 12, statement: statement))
+            rawKey: rawKey,
+            errorCode: errorCode,
+            attributes: attributes
         )
     }
 

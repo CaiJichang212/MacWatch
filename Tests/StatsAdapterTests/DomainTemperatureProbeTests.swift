@@ -76,6 +76,29 @@ final class DomainTemperatureProbeTests: XCTestCase {
         XCTAssertEqual(samples[1].attributes["sourceSet"], "HID Sensors,SMC")
     }
 
+    func testGPUProbeTreatsZeroReadingsAsUnavailable() async {
+        let probe = GPUTemperatureProbe(
+            platformDetector: FakeGPUPlatformDetector(platform: .m4),
+            hidReader: FakeGPUHIDReader(values: [
+                "GPU MTR Temp Sensor0": 0,
+            ]),
+            smcReader: FakeGPUSMCReader(values: [
+                "Tg0G": 0,
+            ]),
+            ioAcceleratorReader: FakeIOAcceleratorReader(reading: nil),
+            catalog: AppleSiliconSensorCatalog()
+        )
+
+        let samples = await probe.read(sessionID: UUID(), at: Date(timeIntervalSince1970: 56))
+
+        XCTAssertEqual(samples.map(\.metricName), [
+            TemperatureMetricName.gpuHottest,
+            TemperatureMetricName.gpuAverage,
+        ])
+        XCTAssertTrue(samples.allSatisfy { $0.quality == .readFailed })
+        XCTAssertTrue(samples.allSatisfy { $0.valueCelsius == nil })
+    }
+
     func testSSDProbeUsesNVMeSMARTWhenAvailable() async {
         let probe = SSDTemperatureProbe(
             nvmeReader: FakeNVMeReader(reading: NVMeSMARTTemperatureReading(valueCelsius: 39.5, smartField: "temperature")),

@@ -1,7 +1,8 @@
 import Foundation
 
 public struct TemperatureSample: Codable, Identifiable, Hashable, Sendable {
-    public static let validTemperatureRange: Range<Double> = 0..<110
+    public static let minimumValidTemperatureCelsius: Double = 0
+    public static let maximumValidTemperatureCelsius: Double = 110
 
     public let id: UUID
     public let sessionID: UUID
@@ -149,6 +150,8 @@ public struct TemperatureSample: Codable, Identifiable, Hashable, Sendable {
     }
 
     public static func isValidTemperatureValue(_ value: Double) -> Bool {
-        value.isFinite && validTemperatureRange.contains(value)
+        value.isFinite &&
+            value > minimumValidTemperatureCelsius &&
+            value < maximumValidTemperatureCelsius
     }
 }
